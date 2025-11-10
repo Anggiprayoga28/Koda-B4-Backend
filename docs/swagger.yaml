@@ -1,32 +1,5 @@
 basePath: /
 definitions:
-  models.ChangePasswordRequest:
-    properties:
-      new_password:
-        type: string
-      old_password:
-        type: string
-    type: object
-  models.CreateOrderRequest:
-    properties:
-      product_id:
-        type: integer
-      quantity:
-        type: integer
-    type: object
-  models.CreateUserRequest:
-    properties:
-      email:
-        type: string
-      full_name:
-        type: string
-      password:
-        type: string
-      phone:
-        type: string
-      role:
-        type: string
-    type: object
   models.ErrorResponse:
     properties:
       error:
@@ -35,13 +8,6 @@ definitions:
         type: string
       success:
         type: boolean
-    type: object
-  models.LoginRequest:
-    properties:
-      email:
-        type: string
-      password:
-        type: string
     type: object
   models.MetaData:
     properties:
@@ -64,19 +30,6 @@ definitions:
       success:
         type: boolean
     type: object
-  models.RegisterRequest:
-    properties:
-      email:
-        type: string
-      full_name:
-        type: string
-      password:
-        type: string
-      phone:
-        type: string
-      role:
-        type: string
-    type: object
   models.Response:
     properties:
       data: {}
@@ -84,33 +37,6 @@ definitions:
         type: string
       success:
         type: boolean
-    type: object
-  models.UpdateOrderStatusRequest:
-    properties:
-      status:
-        type: string
-    type: object
-  models.UpdateProfileRequest:
-    properties:
-      address:
-        type: string
-      full_name:
-        type: string
-      phone:
-        type: string
-    type: object
-  models.UpdateUserRequest:
-    properties:
-      address:
-        type: string
-      email:
-        type: string
-      full_name:
-        type: string
-      phone:
-        type: string
-      role:
-        type: string
     type: object
 host: localhost:8082
 info:
@@ -188,7 +114,7 @@ paths:
   /admin/orders/{id}/status:
     patch:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Update order status (Admin)
       parameters:
       - description: Order ID
@@ -196,12 +122,11 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Status Request
-        in: body
-        name: request
+      - description: Status
+        in: formData
+        name: status
         required: true
-        schema:
-          $ref: '#/definitions/models.UpdateOrderStatusRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -262,7 +187,7 @@ paths:
       - Admin - Products
   /admin/products/{id}:
     delete:
-      description: Soft delete product (Admin)
+      description: Delete product permanently (Admin)
       parameters:
       - description: Product ID
         in: path
@@ -359,15 +284,32 @@ paths:
       - Admin - Users
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Create new user (Admin)
       parameters:
-      - description: User Request
-        in: body
-        name: request
+      - description: Email
+        in: formData
+        name: email
         required: true
-        schema:
-          $ref: '#/definitions/models.CreateUserRequest'
+        type: string
+      - description: Password
+        in: formData
+        name: password
+        required: true
+        type: string
+      - description: Role (admin/customer)
+        in: formData
+        name: role
+        required: true
+        type: string
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
       produces:
       - application/json
       responses:
@@ -427,7 +369,7 @@ paths:
       - Admin - Users
     patch:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Update user (Admin)
       parameters:
       - description: User ID
@@ -435,12 +377,26 @@ paths:
         name: id
         required: true
         type: integer
-      - description: User Request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateUserRequest'
+      - description: Email
+        in: formData
+        name: email
+        type: string
+      - description: Role
+        in: formData
+        name: role
+        type: string
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
       produces:
       - application/json
       responses:
@@ -456,15 +412,19 @@ paths:
   /auth/change-password:
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Change user password
       parameters:
-      - description: Password Request
-        in: body
-        name: request
+      - description: Old Password
+        in: formData
+        name: old_password
         required: true
-        schema:
-          $ref: '#/definitions/models.ChangePasswordRequest'
+        type: string
+      - description: New Password
+        in: formData
+        name: new_password
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -480,15 +440,19 @@ paths:
   /auth/login:
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Login with email and password
       parameters:
-      - description: Login Request
-        in: body
-        name: request
+      - description: Email
+        in: formData
+        name: email
         required: true
-        schema:
-          $ref: '#/definitions/models.LoginRequest'
+        type: string
+      - description: Password
+        in: formData
+        name: password
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -520,15 +484,21 @@ paths:
       - Authentication
     patch:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Update user profile information
       parameters:
-      - description: Update Request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateProfileRequest'
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
       produces:
       - application/json
       responses:
@@ -567,15 +537,32 @@ paths:
   /auth/register:
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Register a new customer account
       parameters:
-      - description: Register Request
-        in: body
-        name: request
+      - description: Email
+        in: formData
+        name: email
         required: true
-        schema:
-          $ref: '#/definitions/models.RegisterRequest'
+        type: string
+      - description: Password
+        in: formData
+        name: password
+        required: true
+        type: string
+      - description: Full Name
+        in: formData
+        name: full_name
+        required: true
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Role
+        in: formData
+        name: role
+        type: string
       produces:
       - application/json
       responses:
@@ -606,15 +593,19 @@ paths:
   /orders:
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Create new order
       parameters:
-      - description: Order Request
-        in: body
-        name: request
+      - description: Product ID
+        in: formData
+        name: product_id
         required: true
-        schema:
-          $ref: '#/definitions/models.CreateOrderRequest'
+        type: integer
+      - description: Quantity
+        in: formData
+        name: quantity
+        required: true
+        type: integer
       produces:
       - application/json
       responses:
