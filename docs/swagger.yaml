@@ -14,19 +14,6 @@ definitions:
       quantity:
         type: integer
     type: object
-  models.CreateProductRequest:
-    properties:
-      category_id:
-        type: integer
-      description:
-        type: string
-      name:
-        type: string
-      price:
-        type: integer
-      stock:
-        type: integer
-    type: object
   models.CreateUserRequest:
     properties:
       email:
@@ -87,6 +74,8 @@ definitions:
         type: string
       phone:
         type: string
+      role:
+        type: string
     type: object
   models.Response:
     properties:
@@ -100,21 +89,6 @@ definitions:
     properties:
       status:
         type: string
-    type: object
-  models.UpdateProductRequest:
-    properties:
-      category_id:
-        type: integer
-      description:
-        type: string
-      is_active:
-        type: boolean
-      name:
-        type: string
-      price:
-        type: integer
-      stock:
-        type: integer
     type: object
   models.UpdateProfileRequest:
     properties:
@@ -243,15 +217,37 @@ paths:
   /admin/products:
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Create new product (Admin)
       parameters:
-      - description: Product Request
-        in: body
-        name: request
+      - description: Product name
+        in: formData
+        name: name
         required: true
-        schema:
-          $ref: '#/definitions/models.CreateProductRequest'
+        type: string
+      - description: Product description
+        in: formData
+        name: description
+        type: string
+      - description: Category ID
+        in: formData
+        name: category_id
+        required: true
+        type: integer
+      - description: Product price
+        in: formData
+        name: price
+        required: true
+        type: integer
+      - description: Product stock
+        in: formData
+        name: stock
+        required: true
+        type: integer
+      - description: Product image
+        in: formData
+        name: image
+        type: file
       produces:
       - application/json
       responses:
@@ -287,7 +283,7 @@ paths:
       - Admin - Products
     patch:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Update product (Admin)
       parameters:
       - description: Product ID
@@ -295,12 +291,34 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Product Request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateProductRequest'
+      - description: Product name
+        in: formData
+        name: name
+        type: string
+      - description: Product description
+        in: formData
+        name: description
+        type: string
+      - description: Category ID
+        in: formData
+        name: category_id
+        type: integer
+      - description: Product price
+        in: formData
+        name: price
+        type: integer
+      - description: Product stock
+        in: formData
+        name: stock
+        type: integer
+      - description: Is active
+        in: formData
+        name: is_active
+        type: boolean
+      - description: Product image
+        in: formData
+        name: image
+        type: file
       produces:
       - application/json
       responses:
