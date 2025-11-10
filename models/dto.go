@@ -5,16 +5,12 @@ type RegisterRequest struct {
 	Password string `json:"password"`
 	FullName string `json:"full_name"`
 	Phone    string `json:"phone"`
+	Role     string `json:"role"`
 }
 
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-}
-
-type LoginResponse struct {
-	Token string          `json:"token"`
-	User  UserWithProfile `json:"user"`
 }
 
 type UpdateProfileRequest struct {
@@ -44,6 +40,32 @@ type UpdateUserRequest struct {
 	Address  string `json:"address"`
 }
 
+type CreateProductRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	CategoryID  int    `json:"category_id"`
+	Price       int    `json:"price"`
+	Stock       int    `json:"stock"`
+}
+
+type UpdateProductRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	CategoryID  int    `json:"category_id"`
+	Price       int    `json:"price"`
+	Stock       int    `json:"stock"`
+	IsActive    bool   `json:"is_active"`
+}
+
+type CreateOrderRequest struct {
+	ProductID int `json:"product_id"`
+	Quantity  int `json:"quantity"`
+}
+
+type UpdateOrderStatusRequest struct {
+	Status string `json:"status"`
+}
+
 type Response struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message"`
@@ -70,19 +92,15 @@ type MetaData struct {
 	TotalPages int `json:"total_pages"`
 }
 
-type CreateProductRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CategoryID  int    `json:"category_id"`
-	Price       int    `json:"price"`
-	Stock       int    `json:"stock"`
+type LoginResponse struct {
+	Token string          `json:"token"`
+	User  UserWithProfile `json:"user"`
 }
 
-type UpdateProductRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CategoryID  int    `json:"category_id"`
-	Price       int    `json:"price"`
-	Stock       int    `json:"stock"`
-	IsActive    bool   `json:"is_active"`
+type DashboardStats struct {
+	TotalOrders     int `json:"total_orders"`
+	PendingOrders   int `json:"pending_orders"`
+	ShippingOrders  int `json:"shipping_orders"`
+	CompletedOrders int `json:"completed_orders"`
+	TotalRevenue    int `json:"total_revenue"`
 }
