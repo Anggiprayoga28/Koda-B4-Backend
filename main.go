@@ -1,43 +1,43 @@
 package main
 
 import (
-	"coffee-shop/config"
-	_ "coffee-shop/docs"
 	"coffee-shop/middleware"
+	"coffee-shop/models"
 	"coffee-shop/routes"
 	"log"
 	"os"
 
+	_ "coffee-shop/docs"
+
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
+// @title Coffee Shop
+// @version 1.0
+// @description REST API for Coffee Shop Management System
+// @host localhost:8082
+// @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
+	godotenv.Load()
 
-	config.LoadConfig()
+	models.InitDB()
+	defer models.CloseDB()
 
-	if config.AppConfig.AppEnv == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	} else {
-		gin.SetMode(gin.DebugMode)
+	r := gin.Default()
+	r.Use(middleware.CORSMiddleware())
+
+	routes.SetupRoutes(r)
+
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = "8082"
 	}
 
-	config.ConnectDB()
-	defer config.CloseDB()
-
-	if err := os.MkdirAll(config.AppConfig.UploadDir, os.ModePerm); err != nil {
-		log.Fatalf("Failed to create upload directory: %v", err)
-	}
-
-	router := gin.Default()
-	router.Use(middleware.CORSMiddleware())
-	routes.SetupRoutes(router)
-
-	port := ":" + config.AppConfig.Port
-	log.Printf("Server starting on port %s", port)
-	log.Printf("Environment: %s", config.AppConfig.AppEnv)
-	log.Printf("Swagger UI: http://localhost:%s/swagger/index.html", config.AppConfig.Port)
-
-	if err := router.Run(port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
+	log.Printf("Server running on port %s", port)
+	log.Printf("Swagger UI: http://localhost:%s/swagger/index.html", port)
+	r.Run(":" + port)
 }
