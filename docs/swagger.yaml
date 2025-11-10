@@ -45,6 +45,77 @@ info:
   title: Coffee Shop
   version: "1.0"
 paths:
+  /admin/categories:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create a new category (Admin only)
+      parameters:
+      - description: Category name
+        in: formData
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Create new category
+      tags:
+      - categories
+  /admin/categories/{id}:
+    delete:
+      description: Delete a category (Admin only)
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete category
+      tags:
+      - categories
+    patch:
+      consumes:
+      - multipart/form-data
+      description: Update an existing category (Admin only)
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Category name
+        in: formData
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Update category
+      tags:
+      - categories
   /admin/dashboard:
     get:
       description: Get dashboard statistics (Admin)
@@ -415,7 +486,7 @@ paths:
       - multipart/form-data
       description: Change user password (can be used with or without token)
       parameters:
-      - description: Email
+      - description: Email (required if no token)
         in: formData
         name: email
         type: string
@@ -597,6 +668,29 @@ paths:
       summary: Get all categories
       tags:
       - Categories
+  /categories/{id}:
+    get:
+      description: Get a single category by ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get category by ID
+      tags:
+      - categories
   /orders:
     post:
       consumes:
