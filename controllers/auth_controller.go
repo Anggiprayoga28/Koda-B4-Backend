@@ -369,23 +369,51 @@ func (ctrl *AuthController) UpdateProfilePhoto(c *gin.Context) {
 
 // ChangePassword godoc
 // @Summary Change password
-// @Description Change user password
+// @Description Change user password (can be used with or without token)
 // @Tags Authentication
-// @Security BearerAuth
 // @Accept multipart/form-data
 // @Produce json
+// @Param email formData string false "Email (required if no token)"
 // @Param old_password formData string true "Old Password"
 // @Param new_password formData string true "New Password"
+// @Param confirm_password formData string true "Confirm New Password"
 // @Success 200 {object} models.Response
 // @Router /auth/change-password [post]
 func (ctrl *AuthController) ChangePassword(c *gin.Context) {
-	userID := c.GetInt("user_id")
+	userID, hasToken := c.Get("user_id")
+
+	var email string
+	var currentHash string
+	var id int
+
+	if hasToken {
+		id = userID.(int)
+		models.DB.QueryRow(context.Background(),
+			"SELECT email, password FROM users WHERE id=$1", id).Scan(&email, &currentHash)
+	} else {
+		email = strings.TrimSpace(c.PostForm("email"))
+		if email == "" {
+			c.JSON(400, gin.H{"success": false, "message": "Email is required when not logged in"})
+			return
+		}
+		if !isValidEmail(email) {
+			c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+			return
+		}
+		err := models.DB.QueryRow(context.Background(),
+			"SELECT id, password FROM users WHERE email=$1", email).Scan(&id, &currentHash)
+		if err != nil {
+			c.JSON(404, gin.H{"success": false, "message": "Email not found"})
+			return
+		}
+	}
 
 	oldPassword := c.PostForm("old_password")
 	newPassword := c.PostForm("new_password")
+	confirmPassword := c.PostForm("confirm_password")
 
-	if oldPassword == "" || newPassword == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Old and new password are required"})
+	if oldPassword == "" || newPassword == "" || confirmPassword == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Old password, new password, and confirm password are required"})
 		return
 	}
 
@@ -394,13 +422,15 @@ func (ctrl *AuthController) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	if newPassword != confirmPassword {
+		c.JSON(400, gin.H{"success": false, "message": "New password and confirm password do not match"})
+		return
+	}
+
 	if oldPassword == newPassword {
 		c.JSON(400, gin.H{"success": false, "message": "New password must be different from old password"})
 		return
 	}
-
-	var currentHash string
-	models.DB.QueryRow(context.Background(), "SELECT password FROM users WHERE id=$1", userID).Scan(&currentHash)
 
 	if !verifyPassword(currentHash, oldPassword) {
 		c.JSON(400, gin.H{"success": false, "message": "Invalid old password"})
@@ -408,8 +438,9 @@ func (ctrl *AuthController) ChangePassword(c *gin.Context) {
 	}
 
 	newHash, _ := hashPassword(newPassword)
-	models.DB.Exec(context.Background(), "UPDATE users SET password=$1, updated_at=$2 WHERE id=$3",
-		newHash, time.Now(), userID)
+	models.DB.Exec(context.Background(),
+		"UPDATE users SET password=$1, updated_at=$2 WHERE id=$3",
+		newHash, time.Now(), id)
 
-	c.JSON(200, gin.H{"success": true, "message": "Password changed"})
+	c.JSON(200, gin.H{"success": true, "message": "Password changed successfully"})
 }
