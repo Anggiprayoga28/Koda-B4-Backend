@@ -587,12 +587,7 @@ const docTemplate = `{
         },
         "/auth/change-password": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Change user password",
+                "description": "Change user password (can be used with or without token)",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -606,6 +601,12 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "Email",
+                        "name": "email",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
                         "description": "Old Password",
                         "name": "old_password",
                         "in": "formData",
@@ -615,6 +616,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "New Password",
                         "name": "new_password",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Confirm New Password",
+                        "name": "confirm_password",
                         "in": "formData",
                         "required": true
                     }

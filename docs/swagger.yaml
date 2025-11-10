@@ -413,8 +413,12 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Change user password
+      description: Change user password (can be used with or without token)
       parameters:
+      - description: Email
+        in: formData
+        name: email
+        type: string
       - description: Old Password
         in: formData
         name: old_password
@@ -425,6 +429,11 @@ paths:
         name: new_password
         required: true
         type: string
+      - description: Confirm New Password
+        in: formData
+        name: confirm_password
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -432,8 +441,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
       summary: Change password
       tags:
       - Authentication
