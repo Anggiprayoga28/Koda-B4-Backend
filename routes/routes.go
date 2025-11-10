@@ -14,6 +14,7 @@ func SetupRoutes(router *gin.Engine) {
 	userCtrl := &controllers.UserController{}
 	productCtrl := &controllers.ProductController{}
 	orderCtrl := &controllers.OrderController{}
+	categoryCtrl := &controllers.CategoryController{}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
@@ -22,7 +23,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/auth/login", authCtrl.Login)
 	router.POST("/auth/change-password", authCtrl.ChangePassword)
 
-	router.GET("/categories", productCtrl.GetAllCategories)
+	router.GET("/categories", categoryCtrl.GetCategories)
+	router.GET("/categories/:id", categoryCtrl.GetCategoryByID)
+
 	router.GET("/products", productCtrl.GetAllProducts)
 	router.GET("/products/:id", productCtrl.GetProductByID)
 
@@ -50,6 +53,10 @@ func SetupRoutes(router *gin.Engine) {
 		admin.POST("/users", userCtrl.CreateUser)
 		admin.PATCH("/users/:id", userCtrl.UpdateUser)
 		admin.DELETE("/users/:id", userCtrl.DeleteUser)
+
+		admin.POST("/categories", categoryCtrl.CreateCategory)
+		admin.PATCH("/categories/:id", categoryCtrl.UpdateCategory)
+		admin.DELETE("/categories/:id", categoryCtrl.DeleteCategory)
 
 		admin.POST("/products", productCtrl.CreateProduct)
 		admin.PATCH("/products/:id", productCtrl.UpdateProduct)
