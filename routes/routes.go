@@ -20,18 +20,24 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.POST("/auth/register", authCtrl.Register)
 	router.POST("/auth/login", authCtrl.Login)
+	router.POST("/auth/change-password", authCtrl.ChangePassword)
+
 	router.GET("/categories", productCtrl.GetAllCategories)
 	router.GET("/products", productCtrl.GetAllProducts)
 	router.GET("/products/:id", productCtrl.GetProductByID)
 
-	auth := router.Group("/")
-	auth.Use(middleware.AuthMiddleware())
+	authProtected := router.Group("/auth")
+	authProtected.Use(middleware.AuthMiddleware())
 	{
-		auth.GET("/auth/profile", authCtrl.GetProfile)
-		auth.PATCH("/auth/profile", authCtrl.UpdateProfile)
-		auth.POST("/auth/profile/photo", authCtrl.UpdateProfilePhoto)
-		auth.POST("/auth/change-password", authCtrl.ChangePassword)
-		auth.POST("/orders", orderCtrl.CreateOrder)
+		authProtected.GET("/profile", authCtrl.GetProfile)
+		authProtected.PATCH("/profile", authCtrl.UpdateProfile)
+		authProtected.POST("/profile/photo", authCtrl.UpdateProfilePhoto)
+	}
+
+	orderRoutes := router.Group("/orders")
+	orderRoutes.Use(middleware.AuthMiddleware())
+	{
+		orderRoutes.POST("", orderCtrl.CreateOrder)
 	}
 
 	admin := router.Group("/admin")
