@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -89,37 +90,90 @@ func getEnv(key, def string) string {
 	return def
 }
 
+func isValidEmail(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+	match, _ := regexp.MatchString(pattern, email)
+	return match
+}
+
+func isValidPassword(password string) bool {
+	return len(password) >= 6
+}
+
+func isValidPhone(phone string) bool {
+	if phone == "" {
+		return true
+	}
+	pattern := `^[\d+\-\s()]+$`
+	match, _ := regexp.MatchString(pattern, phone)
+	return match && len(phone) >= 10
+}
+
 // Register godoc
 // @Summary Register new user
 // @Description Register a new customer account
 // @Tags Authentication
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body models.RegisterRequest true "Register Request"
+// @Param email formData string true "Email"
+// @Param password formData string true "Password"
+// @Param full_name formData string true "Full Name"
+// @Param phone formData string false "Phone"
+// @Param role formData string false "Role"
 // @Success 201 {object} models.Response
 // @Failure 400 {object} models.ErrorResponse
 // @Router /auth/register [post]
 func (ctrl *AuthController) Register(c *gin.Context) {
-	var req models.RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	email := strings.TrimSpace(c.PostForm("email"))
+	password := c.PostForm("password")
+	fullName := strings.TrimSpace(c.PostForm("full_name"))
+	phone := strings.TrimSpace(c.PostForm("phone"))
+	role := c.DefaultPostForm("role", "customer")
+
+	if email == "" || password == "" || fullName == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Email, password, and full_name are required"})
+		return
+	}
+
+	if !isValidEmail(email) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+		return
+	}
+
+	if !isValidPassword(password) {
+		c.JSON(400, gin.H{"success": false, "message": "Password must be at least 6 characters"})
+		return
+	}
+
+	if len(fullName) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
+		return
+	}
+
+	if !isValidPhone(phone) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
+		return
+	}
+
+	if role != "customer" && role != "admin" {
+		c.JSON(400, gin.H{"success": false, "message": "Role must be 'customer' or 'admin'"})
 		return
 	}
 
 	var exists int
-	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", req.Email).Scan(&exists)
+	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", email).Scan(&exists)
 	if exists > 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Email already exists"})
 		return
 	}
 
-	hash, _ := hashPassword(req.Password)
+	hash, _ := hashPassword(password)
 	now := time.Now()
 
 	var userID int
 	err := models.DB.QueryRow(context.Background(),
-		"INSERT INTO users (email, password, role, created_at, updated_at) VALUES ($1,$2, $5,$3,$4) RETURNING id",
-		req.Email, hash, now, now, req.Role).Scan(&userID)
+		"INSERT INTO users (email, password, role, created_at, updated_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+		email, hash, role, now, now).Scan(&userID)
 
 	if err != nil {
 		c.JSON(500, gin.H{"success": false, "message": "Registration failed"})
@@ -128,9 +182,9 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 
 	models.DB.Exec(context.Background(),
 		"INSERT INTO user_profiles (user_id, full_name, phone, created_at, updated_at) VALUES ($1,$2,$3,$4,$5)",
-		userID, req.FullName, req.Phone, now, now)
+		userID, fullName, phone, now, now)
 
-	token, _ := generateToken(userID, req.Email, req.Role)
+	token, _ := generateToken(userID, email, role)
 
 	c.JSON(201, gin.H{
 		"success": true,
@@ -139,10 +193,10 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 			"token": token,
 			"user": gin.H{
 				"id":        userID,
-				"email":     req.Email,
-				"role":      req.Role,
-				"full_name": req.FullName,
-				"phone":     req.Phone,
+				"email":     email,
+				"role":      role,
+				"full_name": fullName,
+				"phone":     phone,
 			},
 		},
 	})
@@ -152,30 +206,38 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 // @Summary User login
 // @Description Login with email and password
 // @Tags Authentication
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body models.LoginRequest true "Login Request"
+// @Param email formData string true "Email"
+// @Param password formData string true "Password"
 // @Success 200 {object} models.Response
 // @Failure 401 {object} models.ErrorResponse
 // @Router /auth/login [post]
 func (ctrl *AuthController) Login(c *gin.Context) {
-	var req models.LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	email := strings.TrimSpace(c.PostForm("email"))
+	password := c.PostForm("password")
+
+	if email == "" || password == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Email and password are required"})
+		return
+	}
+
+	if !isValidEmail(email) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
 		return
 	}
 
 	var id int
-	var email, password, role string
+	var emailDB, passwordDB, role string
 	err := models.DB.QueryRow(context.Background(),
-		"SELECT id, email, password, role FROM users WHERE email=$1", req.Email).Scan(&id, &email, &password, &role)
+		"SELECT id, email, password, role FROM users WHERE email=$1", email).Scan(&id, &emailDB, &passwordDB, &role)
 
-	if err != nil || !verifyPassword(password, req.Password) {
+	if err != nil || !verifyPassword(passwordDB, password) {
 		c.JSON(401, gin.H{"success": false, "message": "Invalid credentials"})
 		return
 	}
 
-	token, _ := generateToken(id, email, role)
+	token, _ := generateToken(id, emailDB, role)
 
 	var fullName, phone, address, photoURL string
 	models.DB.QueryRow(context.Background(),
@@ -189,7 +251,7 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 			"token": token,
 			"user": gin.H{
 				"id":        id,
-				"email":     email,
+				"email":     emailDB,
 				"role":      role,
 				"full_name": fullName,
 				"phone":     phone,
@@ -238,23 +300,33 @@ func (ctrl *AuthController) GetProfile(c *gin.Context) {
 // @Description Update user profile information
 // @Tags Authentication
 // @Security BearerAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body models.UpdateProfileRequest true "Update Request"
+// @Param full_name formData string false "Full Name"
+// @Param phone formData string false "Phone"
+// @Param address formData string false "Address"
 // @Success 200 {object} models.Response
 // @Router /auth/profile [patch]
 func (ctrl *AuthController) UpdateProfile(c *gin.Context) {
 	userID := c.GetInt("user_id")
 
-	var req models.UpdateProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	fullName := strings.TrimSpace(c.PostForm("full_name"))
+	phone := strings.TrimSpace(c.PostForm("phone"))
+	address := strings.TrimSpace(c.PostForm("address"))
+
+	if fullName != "" && len(fullName) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
+		return
+	}
+
+	if !isValidPhone(phone) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
 		return
 	}
 
 	models.DB.Exec(context.Background(),
 		"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
-		req.FullName, req.Phone, req.Address, time.Now(), userID)
+		fullName, phone, address, time.Now(), userID)
 
 	c.JSON(200, gin.H{"success": true, "message": "Profile updated"})
 }
@@ -300,29 +372,42 @@ func (ctrl *AuthController) UpdateProfilePhoto(c *gin.Context) {
 // @Description Change user password
 // @Tags Authentication
 // @Security BearerAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body models.ChangePasswordRequest true "Password Request"
+// @Param old_password formData string true "Old Password"
+// @Param new_password formData string true "New Password"
 // @Success 200 {object} models.Response
 // @Router /auth/change-password [post]
 func (ctrl *AuthController) ChangePassword(c *gin.Context) {
 	userID := c.GetInt("user_id")
 
-	var req models.ChangePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	oldPassword := c.PostForm("old_password")
+	newPassword := c.PostForm("new_password")
+
+	if oldPassword == "" || newPassword == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Old and new password are required"})
+		return
+	}
+
+	if !isValidPassword(newPassword) {
+		c.JSON(400, gin.H{"success": false, "message": "New password must be at least 6 characters"})
+		return
+	}
+
+	if oldPassword == newPassword {
+		c.JSON(400, gin.H{"success": false, "message": "New password must be different from old password"})
 		return
 	}
 
 	var currentHash string
 	models.DB.QueryRow(context.Background(), "SELECT password FROM users WHERE id=$1", userID).Scan(&currentHash)
 
-	if !verifyPassword(currentHash, req.OldPassword) {
+	if !verifyPassword(currentHash, oldPassword) {
 		c.JSON(400, gin.H{"success": false, "message": "Invalid old password"})
 		return
 	}
 
-	newHash, _ := hashPassword(req.NewPassword)
+	newHash, _ := hashPassword(newPassword)
 	models.DB.Exec(context.Background(), "UPDATE users SET password=$1, updated_at=$2 WHERE id=$3",
 		newHash, time.Now(), userID)
 
