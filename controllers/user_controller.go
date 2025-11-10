@@ -4,7 +4,9 @@ import (
 	"coffee-shop/models"
 	"context"
 	"math"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -72,6 +74,11 @@ func (ctrl *UserController) GetAllUsers(c *gin.Context) {
 func (ctrl *UserController) GetUserByID(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid user ID"})
+		return
+	}
+
 	var email, role, fullName, phone, address, photoURL string
 	var createdAt time.Time
 	err := models.DB.QueryRow(context.Background(),
@@ -94,44 +101,97 @@ func (ctrl *UserController) GetUserByID(c *gin.Context) {
 	})
 }
 
+func isValidEmailUser(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+	match, _ := regexp.MatchString(pattern, email)
+	return match
+}
+
+func isValidPasswordUser(password string) bool {
+	return len(password) >= 6
+}
+
+func isValidPhoneUser(phone string) bool {
+	if phone == "" {
+		return true
+	}
+	pattern := `^[\d+\-\s()]+$`
+	match, _ := regexp.MatchString(pattern, phone)
+	return match && len(phone) >= 10
+}
+
 // @Summary Create user
 // @Description Create new user (Admin)
 // @Tags Admin - Users
 // @Security BearerAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body models.CreateUserRequest true "User Request"
+// @Param email formData string true "Email"
+// @Param password formData string true "Password"
+// @Param role formData string true "Role (admin/customer)"
+// @Param full_name formData string false "Full Name"
+// @Param phone formData string false "Phone"
 // @Success 201 {object} models.Response
 // @Router /admin/users [post]
 func (ctrl *UserController) CreateUser(c *gin.Context) {
-	var req models.CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	email := strings.TrimSpace(c.PostForm("email"))
+	password := c.PostForm("password")
+	role := strings.TrimSpace(c.PostForm("role"))
+	fullName := strings.TrimSpace(c.PostForm("full_name"))
+	phone := strings.TrimSpace(c.PostForm("phone"))
+
+	if email == "" || password == "" || role == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Email, password, and role are required"})
+		return
+	}
+
+	if !isValidEmailUser(email) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+		return
+	}
+
+	if !isValidPasswordUser(password) {
+		c.JSON(400, gin.H{"success": false, "message": "Password must be at least 6 characters"})
+		return
+	}
+
+	if role != "admin" && role != "customer" {
+		c.JSON(400, gin.H{"success": false, "message": "Role must be 'admin' or 'customer'"})
+		return
+	}
+
+	if fullName != "" && len(fullName) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
+		return
+	}
+
+	if !isValidPhoneUser(phone) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
 		return
 	}
 
 	var exists int
-	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", req.Email).Scan(&exists)
+	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", email).Scan(&exists)
 	if exists > 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Email already exists"})
 		return
 	}
 
-	hash, _ := hashPassword(req.Password)
+	hash, _ := hashPassword(password)
 	now := time.Now()
 
 	var userID int
 	models.DB.QueryRow(context.Background(),
 		"INSERT INTO users (email, password, role, created_at, updated_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
-		req.Email, hash, req.Role, now, now).Scan(&userID)
+		email, hash, role, now, now).Scan(&userID)
 
 	models.DB.Exec(context.Background(),
 		"INSERT INTO user_profiles (user_id, full_name, phone, created_at, updated_at) VALUES ($1,$2,$3,$4,$5)",
-		userID, req.FullName, req.Phone, now, now)
+		userID, fullName, phone, now, now)
 
 	c.JSON(201, gin.H{
 		"success": true, "message": "User created",
-		"data": gin.H{"id": userID, "email": req.Email, "role": req.Role, "full_name": req.FullName},
+		"data": gin.H{"id": userID, "email": email, "role": role, "full_name": fullName},
 	})
 }
 
@@ -139,36 +199,77 @@ func (ctrl *UserController) CreateUser(c *gin.Context) {
 // @Description Update user (Admin)
 // @Tags Admin - Users
 // @Security BearerAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
 // @Param id path int true "User ID"
-// @Param request body models.UpdateUserRequest true "User Request"
+// @Param email formData string false "Email"
+// @Param role formData string false "Role"
+// @Param full_name formData string false "Full Name"
+// @Param phone formData string false "Phone"
+// @Param address formData string false "Address"
 // @Success 200 {object} models.Response
 // @Router /admin/users/{id} [patch]
 func (ctrl *UserController) UpdateUser(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	var req models.UpdateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid user ID"})
 		return
 	}
 
-	if req.Email != "" {
-		var exists int
-		models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1 AND id!=$2", req.Email, id).Scan(&exists)
-		if exists > 0 {
+	var exists int
+	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE id=$1", id).Scan(&exists)
+	if exists == 0 {
+		c.JSON(404, gin.H{"success": false, "message": "User not found"})
+		return
+	}
+
+	email := strings.TrimSpace(c.PostForm("email"))
+	role := strings.TrimSpace(c.PostForm("role"))
+	fullName := strings.TrimSpace(c.PostForm("full_name"))
+	phone := strings.TrimSpace(c.PostForm("phone"))
+	address := strings.TrimSpace(c.PostForm("address"))
+
+	if email != "" {
+		if !isValidEmailUser(email) {
+			c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+			return
+		}
+
+		var emailExists int
+		models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1 AND id!=$2", email, id).Scan(&emailExists)
+		if emailExists > 0 {
 			c.JSON(400, gin.H{"success": false, "message": "Email already exists"})
 			return
 		}
+
+		models.DB.Exec(context.Background(), "UPDATE users SET email=$1, updated_at=$2 WHERE id=$3",
+			email, time.Now(), id)
 	}
 
-	models.DB.Exec(context.Background(), "UPDATE users SET email=$1, role=$2, updated_at=$3 WHERE id=$4",
-		req.Email, req.Role, time.Now(), id)
+	if role != "" {
+		if role != "admin" && role != "customer" {
+			c.JSON(400, gin.H{"success": false, "message": "Role must be 'admin' or 'customer'"})
+			return
+		}
+
+		models.DB.Exec(context.Background(), "UPDATE users SET role=$1, updated_at=$2 WHERE id=$3",
+			role, time.Now(), id)
+	}
+
+	if fullName != "" && len(fullName) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
+		return
+	}
+
+	if !isValidPhoneUser(phone) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
+		return
+	}
 
 	models.DB.Exec(context.Background(),
 		"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
-		req.FullName, req.Phone, req.Address, time.Now(), id)
+		fullName, phone, address, time.Now(), id)
 
 	c.JSON(200, gin.H{"success": true, "message": "User updated"})
 }
@@ -183,6 +284,18 @@ func (ctrl *UserController) UpdateUser(c *gin.Context) {
 // @Router /admin/users/{id} [delete]
 func (ctrl *UserController) DeleteUser(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid user ID"})
+		return
+	}
+
+	var exists int
+	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE id=$1", id).Scan(&exists)
+	if exists == 0 {
+		c.JSON(404, gin.H{"success": false, "message": "User not found"})
+		return
+	}
 
 	var photoURL string
 	models.DB.QueryRow(context.Background(), "SELECT photo_url FROM user_profiles WHERE user_id=$1", id).Scan(&photoURL)
