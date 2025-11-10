@@ -69,6 +69,11 @@ func (ctrl *OrderController) GetAllOrders(c *gin.Context) {
 func (ctrl *OrderController) GetOrderByID(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid order ID"})
+		return
+	}
+
 	var o models.Order
 	err := models.DB.QueryRow(context.Background(),
 		"SELECT id, order_number, user_id, status, total, created_at FROM orders WHERE id=$1",
@@ -86,28 +91,62 @@ func (ctrl *OrderController) GetOrderByID(c *gin.Context) {
 // @Description Create new order
 // @Tags Orders
 // @Security BearerAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body models.CreateOrderRequest true "Order Request"
+// @Param product_id formData int true "Product ID"
+// @Param quantity formData int true "Quantity"
 // @Success 201 {object} models.Response
 // @Router /orders [post]
 func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 	userID := c.GetInt("user_id")
 
-	var req models.CreateOrderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	productIDStr := c.PostForm("product_id")
+	quantityStr := c.PostForm("quantity")
+
+	if productIDStr == "" || quantityStr == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Product ID and quantity are required"})
 		return
 	}
 
-	var price int
-	err := models.DB.QueryRow(context.Background(), "SELECT price FROM products WHERE id=$1", req.ProductID).Scan(&price)
+	productID, err := strconv.Atoi(productIDStr)
+	if err != nil || productID <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid product ID"})
+		return
+	}
+
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil || quantity <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid quantity"})
+		return
+	}
+
+	if quantity > 100 {
+		c.JSON(400, gin.H{"success": false, "message": "Maximum quantity is 100"})
+		return
+	}
+
+	var price, stock int
+	var isActive bool
+	err = models.DB.QueryRow(context.Background(),
+		"SELECT price, stock, is_active FROM products WHERE id=$1",
+		productID).Scan(&price, &stock, &isActive)
+
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": "Product not found"})
 		return
 	}
 
-	total := price * req.Quantity
+	if !isActive {
+		c.JSON(400, gin.H{"success": false, "message": "Product is not available"})
+		return
+	}
+
+	if stock < quantity {
+		c.JSON(400, gin.H{"success": false, "message": "Insufficient stock"})
+		return
+	}
+
+	total := price * quantity
 	orderNumber := fmt.Sprintf("ORD-%d", time.Now().Unix())
 	now := time.Now()
 
@@ -126,22 +165,45 @@ func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 // @Description Update order status (Admin)
 // @Tags Admin - Orders
 // @Security BearerAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
 // @Param id path int true "Order ID"
-// @Param request body models.UpdateOrderStatusRequest true "Status Request"
+// @Param status formData string true "Status"
 // @Success 200 {object} models.Response
 // @Router /admin/orders/{id}/status [patch]
 func (ctrl *OrderController) UpdateOrderStatus(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	var req models.UpdateOrderStatusRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request"})
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid order ID"})
 		return
 	}
 
-	models.DB.Exec(context.Background(), "UPDATE orders SET status=$1, updated_at=$2 WHERE id=$3", req.Status, time.Now(), id)
+	status := c.PostForm("status")
+	if status == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Status is required"})
+		return
+	}
+
+	validStatuses := map[string]bool{
+		"pending":   true,
+		"shipping":  true,
+		"done":      true,
+		"cancelled": true,
+	}
+	if !validStatuses[status] {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid status. Must be: pending, shipping, done, or cancelled"})
+		return
+	}
+
+	var exists int
+	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders WHERE id=$1", id).Scan(&exists)
+	if exists == 0 {
+		c.JSON(404, gin.H{"success": false, "message": "Order not found"})
+		return
+	}
+
+	models.DB.Exec(context.Background(), "UPDATE orders SET status=$1, updated_at=$2 WHERE id=$3", status, time.Now(), id)
 	c.JSON(200, gin.H{"success": true, "message": "Status updated"})
 }
 
