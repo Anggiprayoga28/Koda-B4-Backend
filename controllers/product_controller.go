@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -125,21 +126,59 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 // @Success 201 {object} models.Response
 // @Router /admin/products [post]
 func (ctrl *ProductController) CreateProduct(c *gin.Context) {
-	name := c.PostForm("name")
-	description := c.PostForm("description")
-	categoryID, _ := strconv.Atoi(c.PostForm("category_id"))
-	price, _ := strconv.Atoi(c.PostForm("price"))
-	stock, _ := strconv.Atoi(c.PostForm("stock"))
+	name := strings.TrimSpace(c.PostForm("name"))
+	description := strings.TrimSpace(c.PostForm("description"))
+	categoryIDStr := c.PostForm("category_id")
+	priceStr := c.PostForm("price")
+	stockStr := c.PostForm("stock")
 
-	if name == "" || categoryID == 0 || price == 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid request: name, category_id, and price are required"})
+	if name == "" || categoryIDStr == "" || priceStr == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Name, category_id, and price are required"})
+		return
+	}
+
+	if len(name) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Product name must be at least 3 characters"})
+		return
+	}
+
+	categoryID, err := strconv.Atoi(categoryIDStr)
+	if err != nil || categoryID <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid category_id"})
+		return
+	}
+
+	price, err := strconv.Atoi(priceStr)
+	if err != nil || price < 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid price"})
+		return
+	}
+
+	if price < 1000 {
+		c.JSON(400, gin.H{"success": false, "message": "Price must be at least 1000"})
+		return
+	}
+
+	stock := 0
+	if stockStr != "" {
+		stock, err = strconv.Atoi(stockStr)
+		if err != nil || stock < 0 {
+			c.JSON(400, gin.H{"success": false, "message": "Invalid stock"})
+			return
+		}
+	}
+
+	var categoryExists int
+	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM categories WHERE id=$1", categoryID).Scan(&categoryExists)
+	if categoryExists == 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Category not found"})
 		return
 	}
 
 	imageURL := ""
 	file, err := c.FormFile("image")
 	if err == nil {
-		ext := filepath.Ext(file.Filename)
+		ext := strings.ToLower(filepath.Ext(file.Filename))
 		allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true}
 		if !allowedExts[ext] {
 			c.JSON(400, gin.H{"success": false, "message": "Invalid file type. Only jpg, jpeg, png, gif, webp allowed"})
@@ -158,7 +197,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		savePath := filepath.Join(uploadDir, filename)
 
 		if err := c.SaveUploadedFile(file, savePath); err != nil {
-			c.JSON(500, gin.H{"success": false, "message": "Failed to save image"})
+			c.JSON(500, gin.H{"success": false, "message": "Failed to save image: " + err.Error()})
 			return
 		}
 		imageURL = "/uploads/products/" + filename
@@ -171,7 +210,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		name, description, categoryID, price, stock, imageURL, now, now).Scan(&id)
 
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Failed to create product"})
+		c.JSON(500, gin.H{"success": false, "message": "Failed to create product: " + err.Error()})
 		return
 	}
 
@@ -180,7 +219,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		"data": gin.H{
 			"id": id, "name": name, "description": description,
 			"category_id": categoryID, "price": price, "stock": stock,
-			"image_url": imageURL,
+			"image_url": imageURL, "is_active": true,
 		},
 	})
 }
@@ -215,17 +254,42 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	name := c.DefaultPostForm("name", existingProduct.Name)
-	description := c.DefaultPostForm("description", existingProduct.Description)
+	name := strings.TrimSpace(c.DefaultPostForm("name", existingProduct.Name))
+	description := strings.TrimSpace(c.DefaultPostForm("description", existingProduct.Description))
 	categoryID, _ := strconv.Atoi(c.DefaultPostForm("category_id", strconv.Itoa(existingProduct.CategoryID)))
 	price, _ := strconv.Atoi(c.DefaultPostForm("price", strconv.Itoa(existingProduct.Price)))
 	stock, _ := strconv.Atoi(c.DefaultPostForm("stock", strconv.Itoa(existingProduct.Stock)))
 	isActive, _ := strconv.ParseBool(c.DefaultPostForm("is_active", strconv.FormatBool(existingProduct.IsActive)))
 
+	if name != existingProduct.Name && len(name) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Product name must be at least 3 characters"})
+		return
+	}
+
+	if categoryID <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid category_id"})
+		return
+	}
+
+	if price < 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid price"})
+		return
+	}
+
+	if price < 1000 {
+		c.JSON(400, gin.H{"success": false, "message": "Price must be at least 1000"})
+		return
+	}
+
+	if stock < 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid stock"})
+		return
+	}
+
 	imageURL := existingProduct.ImageURL
 	file, err := c.FormFile("image")
 	if err == nil {
-		ext := filepath.Ext(file.Filename)
+		ext := strings.ToLower(filepath.Ext(file.Filename))
 		allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true}
 		if !allowedExts[ext] {
 			c.JSON(400, gin.H{"success": false, "message": "Invalid file type. Only jpg, jpeg, png, gif, webp allowed"})
@@ -265,7 +329,7 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 }
 
 // @Summary Delete product
-// @Description Soft delete product (Admin)
+// @Description Delete product permanently (Admin)
 // @Tags Admin - Products
 // @Security BearerAuth
 // @Produce json
@@ -274,6 +338,31 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 // @Router /admin/products/{id} [delete]
 func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	models.DB.Exec(context.Background(), "UPDATE products SET is_active=false WHERE id=$1", id)
-	c.JSON(200, gin.H{"success": true, "message": "Product deleted"})
+
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid product ID"})
+		return
+	}
+
+	var imageURL string
+	err := models.DB.QueryRow(context.Background(),
+		"SELECT COALESCE(image_url, '') FROM products WHERE id=$1", id).Scan(&imageURL)
+
+	if err != nil {
+		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
+		return
+	}
+
+	_, err = models.DB.Exec(context.Background(), "DELETE FROM products WHERE id=$1", id)
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": "Failed to delete product"})
+		return
+	}
+
+	if imageURL != "" {
+		oldPath := "." + imageURL
+		os.Remove(oldPath)
+	}
+
+	c.JSON(200, gin.H{"success": true, "message": "Product deleted permanently"})
 }
