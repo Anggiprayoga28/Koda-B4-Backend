@@ -254,6 +254,14 @@ coffee-shop/
 └── .env               # Environment variables
 ```
 
+## Result Redis
+### Before use Redis
+![Before](/public/before.png)
+
+### After use Redis
+![After](/public/after.png)
+
+
 ## Response Format
 
 ### Success Response
