@@ -3,6 +3,7 @@ package controllers
 import (
 	"coffee-shop/models"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -39,6 +40,21 @@ func (ctrl *ProductController) GetAllCategories(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true, "message": "Categories retrieved", "data": categories})
 }
 
+func getProductCacheKey(page, limit int) string {
+	return fmt.Sprintf("products_list_p%d_l%d", page, limit)
+}
+
+func invalidateProductCache() {
+	if models.RedisClient == nil {
+		return
+	}
+	ctx := context.Background()
+	iter := models.RedisClient.Scan(ctx, 0, "products_list_*", 0).Iterator()
+	for iter.Next(ctx) {
+		models.RedisClient.Del(ctx, iter.Val())
+	}
+}
+
 // @Summary Get all products
 // @Description Get paginated list of products
 // @Tags Products
@@ -56,6 +72,18 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 	if limit < 1 {
 		limit = 10
 	}
+
+	cacheKey := getProductCacheKey(page, limit)
+	ctx := context.Background()
+
+	if models.RedisClient != nil {
+		cached, err := models.RedisClient.Get(ctx, cacheKey).Result()
+		if err == nil {
+			c.Data(200, "application/json", []byte(cached))
+			return
+		}
+	}
+
 	offset := (page - 1) * limit
 
 	var total int
@@ -78,13 +106,20 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 		})
 	}
 
-	c.JSON(200, gin.H{
+	response := gin.H{
 		"success": true, "message": "Products retrieved", "data": products,
 		"meta": gin.H{
 			"page": page, "limit": limit, "total_items": total,
 			"total_pages": int(math.Ceil(float64(total) / float64(limit))),
 		},
-	})
+	}
+
+	if models.RedisClient != nil {
+		jsonData, _ := json.Marshal(response)
+		models.RedisClient.Set(ctx, cacheKey, string(jsonData), 5*time.Minute)
+	}
+
+	c.JSON(200, response)
 }
 
 // @Summary Get product by ID
@@ -214,6 +249,8 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		return
 	}
 
+	invalidateProductCache()
+
 	c.JSON(201, gin.H{
 		"success": true, "message": "Product created successfully",
 		"data": gin.H{
@@ -325,6 +362,8 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		return
 	}
 
+	invalidateProductCache()
+
 	c.JSON(200, gin.H{"success": true, "message": "Product updated successfully"})
 }
 
@@ -363,6 +402,8 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 		oldPath := "." + imageURL
 		os.Remove(oldPath)
 	}
+
+	invalidateProductCache()
 
 	c.JSON(200, gin.H{"success": true, "message": "Product deleted permanently"})
 }
