@@ -27,6 +27,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/categories/:id", categoryCtrl.GetCategoryByID)
 
 	router.GET("/products", productCtrl.GetAllProducts)
+	router.GET("/products/favorite", productCtrl.GetFavoriteProducts)
 	router.GET("/products/:id", productCtrl.GetProductByID)
 
 	authProtected := router.Group("/auth")
