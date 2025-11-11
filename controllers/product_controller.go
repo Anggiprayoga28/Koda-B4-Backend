@@ -90,19 +90,20 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM products WHERE is_active=true").Scan(&total)
 
 	rows, _ := models.DB.Query(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), is_active, created_at, updated_at FROM products WHERE is_active=true ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true ORDER BY created_at DESC LIMIT $1 OFFSET $2",
 		limit, offset)
 	defer rows.Close()
 
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
 			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
-			"image_url": p.ImageURL, "is_active": p.IsActive,
-			"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		})
 	}
 
@@ -122,6 +123,109 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 	c.JSON(200, response)
 }
 
+// @Summary Filter products
+// @Description Filter products by search, category, sort, and price range
+// @Tags Products
+// @Produce json
+// @Param search query string false "Search by product name"
+// @Param category query []string false "Filter by category"
+// @Param sort_name query string false "Sort by name" Enums(asc, desc)
+// @Param sort_price query string false "Sort by price" Enums(asc, desc)
+// @Param sort query string false "Filter by type"
+// @Param min_price query number false "Minimum price"
+// @Param max_price query number false "Maximum price"
+// @Success 200 {object} models.Response
+// @Router /products/filter [get]
+func (ctrl *ProductController) FilterProducts(c *gin.Context) {
+	search := strings.TrimSpace(c.Query("search"))
+	category := strings.TrimSpace(c.Query("category"))
+	sortBy := strings.TrimSpace(c.Query("sort"))
+	sortName := strings.TrimSpace(c.Query("sort_name"))
+	sortPrice := strings.TrimSpace(c.Query("sort_price"))
+	minPrice, _ := strconv.Atoi(c.Query("min_price"))
+	maxPrice, _ := strconv.Atoi(c.Query("max_price"))
+
+	query := "SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true"
+	args := []interface{}{}
+	paramIndex := 1
+
+	if search != "" {
+		query += fmt.Sprintf(" AND LOWER(name) LIKE LOWER($%d)", paramIndex)
+		args = append(args, "%"+search+"%")
+		paramIndex++
+	}
+
+	if category != "" {
+		if category == "favorite" {
+			query += " AND is_favorite=true"
+		} else {
+			query += fmt.Sprintf(" AND category_id IN (SELECT id FROM categories WHERE LOWER(name)=LOWER($%d))", paramIndex)
+			args = append(args, category)
+			paramIndex++
+		}
+	}
+
+	if minPrice > 0 {
+		query += fmt.Sprintf(" AND price >= $%d", paramIndex)
+		args = append(args, minPrice)
+		paramIndex++
+	}
+
+	if maxPrice > 0 {
+		query += fmt.Sprintf(" AND price <= $%d", paramIndex)
+		args = append(args, maxPrice)
+		paramIndex++
+	}
+
+	if sortBy == "buy1get1" {
+		query += " AND is_buy1get1=true"
+	} else if sortBy == "flash_sale" {
+		query += " AND is_flash_sale=true"
+	}
+
+	orderBy := ""
+	if sortName != "" {
+		if sortName == "asc" {
+			orderBy = " ORDER BY name ASC"
+		} else if sortName == "desc" {
+			orderBy = " ORDER BY name DESC"
+		}
+	} else if sortPrice != "" {
+		if sortPrice == "asc" {
+			orderBy = " ORDER BY price ASC"
+		} else if sortPrice == "desc" {
+			orderBy = " ORDER BY price DESC"
+		}
+	} else {
+		orderBy = " ORDER BY created_at DESC"
+	}
+
+	query += orderBy
+
+	rows, _ := models.DB.Query(context.Background(), query, args...)
+	defer rows.Close()
+
+	products := []gin.H{}
+	for rows.Next() {
+		var p models.Product
+		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		products = append(products, gin.H{
+			"id": p.ID, "name": p.Name, "description": p.Description,
+			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
+		})
+	}
+
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Products filtered",
+		"data":    products,
+		"total":   len(products),
+	})
+}
+
 // @Summary Get favorite products
 // @Description Get list of favorite products (limited to 4)
 // @Tags Products
@@ -130,18 +234,19 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 // @Router /products/favorite [get]
 func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
 	rows, _ := models.DB.Query(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), is_active, created_at, updated_at FROM products WHERE is_active=true AND is_favorite=true ORDER BY created_at DESC LIMIT 4")
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true AND is_favorite=true ORDER BY created_at DESC LIMIT 4")
 	defer rows.Close()
 
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
 			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
-			"image_url": p.ImageURL, "is_active": p.IsActive,
-			"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		})
 	}
 
@@ -161,8 +266,8 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 
 	var p models.Product
 	err := models.DB.QueryRow(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), is_active, created_at, updated_at FROM products WHERE id=$1",
-		id).Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE id=$1",
+		id).Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 
 	if err != nil {
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
@@ -183,6 +288,9 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 // @Param category_id formData int true "Category ID"
 // @Param price formData int true "Product price"
 // @Param stock formData int true "Product stock"
+// @Param is_flash_sale formData bool false "Is flash sale"
+// @Param is_favorite formData bool false "Is favorite"
+// @Param is_buy1get1 formData bool false "Is buy 1 get 1"
 // @Param image formData file false "Product image"
 // @Success 201 {object} models.Response
 // @Router /admin/products [post]
@@ -192,6 +300,9 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	categoryIDStr := c.PostForm("category_id")
 	priceStr := c.PostForm("price")
 	stockStr := c.PostForm("stock")
+	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("is_flash_sale", "false"))
+	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("is_favorite", "false"))
+	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", "false"))
 
 	if name == "" || categoryIDStr == "" || priceStr == "" {
 		c.JSON(400, gin.H{"success": false, "message": "Name, category_id, and price are required"})
@@ -267,8 +378,8 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	now := time.Now()
 	var id int
 	err = models.DB.QueryRow(context.Background(),
-		"INSERT INTO products (name, description, category_id, price, stock, image_url, is_active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8) RETURNING id",
-		name, description, categoryID, price, stock, imageURL, now, now).Scan(&id)
+		"INSERT INTO products (name, description, category_id, price, stock, image_url, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10,$11) RETURNING id",
+		name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, now, now).Scan(&id)
 
 	if err != nil {
 		c.JSON(500, gin.H{"success": false, "message": "Failed to create product: " + err.Error()})
@@ -282,7 +393,9 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		"data": gin.H{
 			"id": id, "name": name, "description": description,
 			"category_id": categoryID, "price": price, "stock": stock,
-			"image_url": imageURL, "is_active": true,
+			"image_url": imageURL, "is_flash_sale": isFlashSale,
+			"is_favorite": isFavorite, "is_buy1get1": isBuy1Get1,
+			"is_active": true,
 		},
 	})
 }
@@ -299,6 +412,9 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 // @Param category_id formData int false "Category ID"
 // @Param price formData int false "Product price"
 // @Param stock formData int false "Product stock"
+// @Param is_flash_sale formData bool false "Is flash sale"
+// @Param is_favorite formData bool false "Is favorite"
+// @Param is_buy1get1 formData bool false "Is buy 1 get 1"
 // @Param is_active formData bool false "Is active"
 // @Param image formData file false "Product image"
 // @Success 200 {object} models.Response
@@ -308,9 +424,10 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 
 	var existingProduct models.Product
 	err := models.DB.QueryRow(context.Background(),
-		"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), is_active FROM products WHERE id=$1",
+		"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active FROM products WHERE id=$1",
 		id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
-		&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL, &existingProduct.IsActive)
+		&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL,
+		&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
 
 	if err != nil {
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
@@ -322,6 +439,9 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	categoryID, _ := strconv.Atoi(c.DefaultPostForm("category_id", strconv.Itoa(existingProduct.CategoryID)))
 	price, _ := strconv.Atoi(c.DefaultPostForm("price", strconv.Itoa(existingProduct.Price)))
 	stock, _ := strconv.Atoi(c.DefaultPostForm("stock", strconv.Itoa(existingProduct.Stock)))
+	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("is_flash_sale", strconv.FormatBool(existingProduct.IsFlashSale)))
+	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("is_favorite", strconv.FormatBool(existingProduct.IsFavorite)))
+	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", strconv.FormatBool(existingProduct.IsBuy1Get1)))
 	isActive, _ := strconv.ParseBool(c.DefaultPostForm("is_active", strconv.FormatBool(existingProduct.IsActive)))
 
 	if name != existingProduct.Name && len(name) < 3 {
@@ -380,8 +500,8 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	}
 
 	_, err = models.DB.Exec(context.Background(),
-		"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, is_active=$7, updated_at=$8 WHERE id=$9",
-		name, description, categoryID, price, stock, imageURL, isActive, time.Now(), id)
+		"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, is_flash_sale=$7, is_favorite=$8, is_buy1get1=$9, is_active=$10, updated_at=$11 WHERE id=$12",
+		name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
 
 	if err != nil {
 		c.JSON(500, gin.H{"success": false, "message": "Failed to update product"})
