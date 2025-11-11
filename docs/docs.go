@@ -332,6 +332,24 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "boolean",
+                        "description": "Is flash sale",
+                        "name": "is_flash_sale",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Is favorite",
+                        "name": "is_favorite",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Is buy 1 get 1",
+                        "name": "is_buy1get1",
+                        "in": "formData"
+                    },
+                    {
                         "type": "file",
                         "description": "Product image",
                         "name": "image",
@@ -434,6 +452,24 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Product stock",
                         "name": "stock",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Is flash sale",
+                        "name": "is_flash_sale",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Is favorite",
+                        "name": "is_favorite",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Is buy 1 get 1",
+                        "name": "is_buy1get1",
                         "in": "formData"
                     },
                     {
@@ -1112,6 +1148,82 @@ const docTemplate = `{
                     "Products"
                 ],
                 "summary": "Get favorite products",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/products/filter": {
+            "get": {
+                "description": "Filter products by search, category, sort, and price range",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Filter products",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search by product name",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort by name",
+                        "name": "sort_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort by price",
+                        "name": "sort_price",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by type",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "Minimum price",
+                        "name": "min_price",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "Maximum price",
+                        "name": "max_price",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",

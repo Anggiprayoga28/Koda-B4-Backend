@@ -240,6 +240,18 @@ paths:
         name: stock
         required: true
         type: integer
+      - description: Is flash sale
+        in: formData
+        name: is_flash_sale
+        type: boolean
+      - description: Is favorite
+        in: formData
+        name: is_favorite
+        type: boolean
+      - description: Is buy 1 get 1
+        in: formData
+        name: is_buy1get1
+        type: boolean
       - description: Product image
         in: formData
         name: image
@@ -307,6 +319,18 @@ paths:
         in: formData
         name: stock
         type: integer
+      - description: Is flash sale
+        in: formData
+        name: is_flash_sale
+        type: boolean
+      - description: Is favorite
+        in: formData
+        name: is_favorite
+        type: boolean
+      - description: Is buy 1 get 1
+        in: formData
+        name: is_buy1get1
+        type: boolean
       - description: Is active
         in: formData
         name: is_active
@@ -777,6 +801,57 @@ paths:
           schema:
             $ref: '#/definitions/models.Response'
       summary: Get favorite products
+      tags:
+      - Products
+  /products/filter:
+    get:
+      description: Filter products by search, category, sort, and price range
+      parameters:
+      - description: Search by product name
+        in: query
+        name: search
+        type: string
+      - collectionFormat: csv
+        description: Filter by category
+        in: query
+        items:
+          type: string
+        name: category
+        type: array
+      - description: Sort by name
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_name
+        type: string
+      - description: Sort by price
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_price
+        type: string
+      - description: Filter by type
+        in: query
+        name: sort
+        type: string
+      - description: Minimum price
+        in: query
+        name: min_price
+        type: number
+      - description: Maximum price
+        in: query
+        name: max_price
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Filter products
       tags:
       - Products
 securityDefinitions:
