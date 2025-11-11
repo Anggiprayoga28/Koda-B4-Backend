@@ -27,6 +27,9 @@ func main() {
 	models.InitDB()
 	defer models.CloseDB()
 
+	models.InitRedis()
+	defer models.CloseRedis()
+
 	r := gin.Default()
 	r.Use(middleware.CORSMiddleware())
 
