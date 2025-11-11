@@ -679,6 +679,56 @@ paths:
       summary: Register new user
       tags:
       - Authentication
+  /cart:
+    get:
+      description: Get all cart items for current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user cart
+      tags:
+      - Cart
+    post:
+      consumes:
+      - multipart/form-data
+      description: Add product to cart with size and temperature options
+      parameters:
+      - description: Product ID
+        in: formData
+        name: product_id
+        required: true
+        type: integer
+      - description: Quantity
+        in: formData
+        name: quantity
+        required: true
+        type: integer
+      - description: Size ID
+        in: formData
+        name: size_id
+        type: integer
+      - description: Temperature ID
+        in: formData
+        name: temperature_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Add to cart with variants
+      tags:
+      - Cart
   /categories:
     get:
       description: Get list of all categories
@@ -788,6 +838,26 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get product by ID
+      tags:
+      - Products
+  /products/{id}/detail:
+    get:
+      description: Get complete product information including sizes, temperatures,
+        and recommendations
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get product detail with variants
       tags:
       - Products
   /products/favorite:
