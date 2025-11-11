@@ -766,6 +766,19 @@ paths:
       summary: Get product by ID
       tags:
       - Products
+  /products/favorite:
+    get:
+      description: Get list of favorite products (limited to 4)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get favorite products
+      tags:
+      - Products
 securityDefinitions:
   BearerAuth:
     in: header

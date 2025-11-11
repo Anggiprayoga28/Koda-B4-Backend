@@ -1102,6 +1102,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/products/favorite": {
+            "get": {
+                "description": "Get list of favorite products (limited to 4)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Get favorite products",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/products/{id}": {
             "get": {
                 "description": "Get product details",
