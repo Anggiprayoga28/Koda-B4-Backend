@@ -122,6 +122,32 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 	c.JSON(200, response)
 }
 
+// @Summary Get favorite products
+// @Description Get list of favorite products (limited to 4)
+// @Tags Products
+// @Produce json
+// @Success 200 {object} models.Response
+// @Router /products/favorite [get]
+func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
+	rows, _ := models.DB.Query(context.Background(),
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), is_active, created_at, updated_at FROM products WHERE is_active=true AND is_favorite=true ORDER BY created_at DESC LIMIT 4")
+	defer rows.Close()
+
+	products := []gin.H{}
+	for rows.Next() {
+		var p models.Product
+		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		products = append(products, gin.H{
+			"id": p.ID, "name": p.Name, "description": p.Description,
+			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
+			"image_url": p.ImageURL, "is_active": p.IsActive,
+			"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
+		})
+	}
+
+	c.JSON(200, gin.H{"success": true, "message": "Favorite products retrieved", "data": products})
+}
+
 // @Summary Get product by ID
 // @Description Get product details
 // @Tags Products
