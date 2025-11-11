@@ -15,6 +15,7 @@ func SetupRoutes(router *gin.Engine) {
 	productCtrl := &controllers.ProductController{}
 	orderCtrl := &controllers.OrderController{}
 	categoryCtrl := &controllers.CategoryController{}
+	productDetailCtrl := &controllers.ProductDetailController{}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
@@ -30,6 +31,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/products/filter", productCtrl.FilterProducts)
 	router.GET("/products/favorite", productCtrl.GetFavoriteProducts)
 	router.GET("/products/:id", productCtrl.GetProductByID)
+	router.GET("/products/:id/detail", productDetailCtrl.GetProductDetail)
 
 	authProtected := router.Group("/auth")
 	authProtected.Use(middleware.AuthMiddleware())
@@ -37,6 +39,13 @@ func SetupRoutes(router *gin.Engine) {
 		authProtected.GET("/profile", authCtrl.GetProfile)
 		authProtected.PATCH("/profile", authCtrl.UpdateProfile)
 		authProtected.POST("/profile/photo", authCtrl.UpdateProfilePhoto)
+	}
+
+	cartRoutes := router.Group("/cart")
+	cartRoutes.Use(middleware.AuthMiddleware())
+	{
+		cartRoutes.POST("", productDetailCtrl.AddToCart)
+		cartRoutes.GET("", productDetailCtrl.GetCart)
 	}
 
 	orderRoutes := router.Group("/orders")
