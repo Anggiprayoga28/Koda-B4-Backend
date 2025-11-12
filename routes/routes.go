@@ -39,7 +39,6 @@ func SetupRoutes(router *gin.Engine) {
 	{
 		authProtected.GET("/profile", authCtrl.GetProfile)
 		authProtected.PATCH("/profile", authCtrl.UpdateProfile)
-		authProtected.POST("/profile/photo", authCtrl.UpdateProfilePhoto)
 	}
 
 	cartRoutes := router.Group("/cart")
