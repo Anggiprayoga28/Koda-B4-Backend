@@ -123,8 +123,8 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 }
 
 // Create cart
-// @Summary Add to cart with variants
-// @Description Add product to cart with size and temperature options
+// @Summary Add to cart
+// @Description Add product to cart
 // @Tags Cart
 // @Security BearerAuth
 // @Accept multipart/form-data
@@ -133,6 +133,7 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 // @Param quantity formData int true "Quantity"
 // @Param size_id formData int false "Size ID"
 // @Param temperature_id formData int false "Temperature ID"
+// @Param variant_id formData int false "Variant ID"
 // @Success 201 {object} models.Response
 // @Router /cart [post]
 func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
@@ -141,6 +142,7 @@ func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
 	quantity, _ := strconv.Atoi(c.PostForm("quantity"))
 	sizeID, _ := strconv.Atoi(c.PostForm("size_id"))
 	tempID, _ := strconv.Atoi(c.PostForm("temperature_id"))
+	variantID, _ := strconv.Atoi(c.PostForm("variant_id"))
 
 	if productID <= 0 || quantity <= 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Invalid product or quantity"})
@@ -150,17 +152,21 @@ func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
 	var existingID, existingQty int
 	err := models.DB.QueryRow(context.Background(),
 		`SELECT id, quantity FROM cart_items 
-		WHERE user_id=$1 AND product_id=$2 AND COALESCE(size_id,0)=$3 AND COALESCE(temperature_id,0)=$4`,
-		userID, productID, sizeID, tempID).Scan(&existingID, &existingQty)
+		WHERE user_id=$1 AND product_id=$2 
+		AND COALESCE(size_id,0)=$3 
+		AND COALESCE(temperature_id,0)=$4
+		AND COALESCE(variant_id,0)=$5`,
+		userID, productID, sizeID, tempID, variantID).Scan(&existingID, &existingQty)
 
 	if err == nil {
 		models.DB.Exec(context.Background(),
-			"UPDATE cart_items SET quantity=$1 WHERE id=$2", existingQty+quantity, existingID)
+			"UPDATE cart_items SET quantity=$1, updated_at=NOW() WHERE id=$2",
+			existingQty+quantity, existingID)
 	} else {
 		models.DB.Exec(context.Background(),
-			`INSERT INTO cart_items (user_id, product_id, quantity, size_id, temperature_id, created_at, updated_at) 
-			VALUES ($1,$2,$3,NULLIF($4,0),NULLIF($5,0),NOW(),NOW())`,
-			userID, productID, quantity, sizeID, tempID)
+			`INSERT INTO cart_items (user_id, product_id, quantity, size_id, temperature_id, variant_id, created_at, updated_at) 
+			VALUES ($1,$2,$3,NULLIF($4,0),NULLIF($5,0),NULLIF($6,0),NOW(),NOW())`,
+			userID, productID, quantity, sizeID, tempID, variantID)
 	}
 
 	c.JSON(201, gin.H{"success": true, "message": "Added to cart"})
@@ -179,36 +185,50 @@ func (ctrl *ProductDetailController) GetCart(c *gin.Context) {
 
 	rows, _ := models.DB.Query(context.Background(),
 		`SELECT ci.id, ci.product_id, p.name, p.price, ci.quantity, 
-		COALESCE(ps.name,''),
-		COALESCE(pt.name,''), COALESCE(p.image_url,'')
+		COALESCE(ps.name,''), COALESCE(ps.price_adjustment,0),
+		COALESCE(pt.name,''), COALESCE(pt.price,0),
+		COALESCE(pv.name,''), COALESCE(pv.price,0),
+		COALESCE(p.image_url,'')
 		FROM cart_items ci
 		JOIN products p ON ci.product_id=p.id
 		LEFT JOIN product_sizes ps ON ci.size_id=ps.id
 		LEFT JOIN product_temperatures pt ON ci.temperature_id=pt.id
+		LEFT JOIN product_variants pv ON ci.variant_id=pv.id
 		WHERE ci.user_id=$1`, userID)
 	defer rows.Close()
 
 	items := []gin.H{}
+	subtotal := 0
 	for rows.Next() {
-		var id, pid, price, qty int
-		var pname, sname, tname, img string
-		rows.Scan(&id, &pid, &pname, &price, &qty, &sname, &tname, &img)
+		var id, pid, basePrice, qty, sizeAdj, tempPrice, variantPrice int
+		var pname, sizeName, tempName, variantName, img string
+		rows.Scan(&id, &pid, &pname, &basePrice, &qty,
+			&sizeName, &sizeAdj, &tempName, &tempPrice,
+			&variantName, &variantPrice, &img)
+
+		itemPrice := (basePrice + sizeAdj + tempPrice + variantPrice) * qty
+		subtotal += itemPrice
 
 		items = append(items, gin.H{
-			"id":          id,
-			"product_id":  pid,
-			"name":        pname,
-			"price":       price,
-			"quantity":    qty,
-			"size":        sname,
-			"temperature": tname,
-			"image_url":   img,
+			"id":                id,
+			"product_id":        pid,
+			"name":              pname,
+			"base_price":        basePrice,
+			"quantity":          qty,
+			"size":              sizeName,
+			"size_adjustment":   sizeAdj,
+			"temperature":       tempName,
+			"temperature_price": tempPrice,
+			"variant":           variantName,
+			"variant_price":     variantPrice,
+			"subtotal":          itemPrice,
+			"image_url":         img,
 		})
 	}
 
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "Cart retrieved",
-		"data":    gin.H{"items": items},
+		"data":    gin.H{"items": items, "subtotal": subtotal},
 	})
 }
