@@ -601,28 +601,9 @@ paths:
         in: formData
         name: address
         type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Update profile
-      tags:
-      - Authentication
-  /auth/profile/photo:
-    post:
-      consumes:
-      - multipart/form-data
-      description: Upload profile photo
-      parameters:
-      - description: Photo file
+      - description: Profile photo
         in: formData
         name: photo
-        required: true
         type: file
       produces:
       - application/json
@@ -633,7 +614,7 @@ paths:
             $ref: '#/definitions/models.Response'
       security:
       - BearerAuth: []
-      summary: Update profile photo
+      summary: Update profile
       tags:
       - Authentication
   /auth/register:
@@ -928,6 +909,44 @@ paths:
       summary: Filter products
       tags:
       - Products
+  /transactions/checkout:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create order
+      parameters:
+      - description: Email
+        in: formData
+        name: email
+        type: string
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
+      - description: Delivery method
+        in: formData
+        name: delivery_method
+        type: string
+      - description: Payment ID
+        in: formData
+        name: payment_method_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Create transaction
+      tags:
+      - Transactions
 securityDefinitions:
   BearerAuth:
     in: header
