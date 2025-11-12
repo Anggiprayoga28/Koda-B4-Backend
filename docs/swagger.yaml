@@ -697,7 +697,7 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Add product to cart with size and temperature options
+      description: Add product to cart
       parameters:
       - description: Product ID
         in: formData
@@ -717,6 +717,10 @@ paths:
         in: formData
         name: temperature_id
         type: integer
+      - description: Variant ID
+        in: formData
+        name: variant_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -726,7 +730,7 @@ paths:
             $ref: '#/definitions/models.Response'
       security:
       - BearerAuth: []
-      summary: Add to cart with variants
+      summary: Add to cart
       tags:
       - Cart
   /categories:

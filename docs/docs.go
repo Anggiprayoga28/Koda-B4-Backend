@@ -1033,7 +1033,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Add product to cart with size and temperature options",
+                "description": "Add product to cart",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1043,7 +1043,7 @@ const docTemplate = `{
                 "tags": [
                     "Cart"
                 ],
-                "summary": "Add to cart with variants",
+                "summary": "Add to cart",
                 "parameters": [
                     {
                         "type": "integer",
@@ -1069,6 +1069,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Temperature ID",
                         "name": "temperature_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Variant ID",
+                        "name": "variant_id",
                         "in": "formData"
                     }
                 ],
