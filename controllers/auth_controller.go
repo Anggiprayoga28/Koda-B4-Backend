@@ -305,6 +305,7 @@ func (ctrl *AuthController) GetProfile(c *gin.Context) {
 // @Param full_name formData string false "Full Name"
 // @Param phone formData string false "Phone"
 // @Param address formData string false "Address"
+// @Param photo formData file false "Profile photo"
 // @Success 200 {object} models.Response
 // @Router /auth/profile [patch]
 func (ctrl *AuthController) UpdateProfile(c *gin.Context) {
@@ -324,47 +325,45 @@ func (ctrl *AuthController) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	models.DB.Exec(context.Background(),
-		"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
-		fullName, phone, address, time.Now(), userID)
-
-	c.JSON(200, gin.H{"success": true, "message": "Profile updated"})
-}
-
-// UpdateProfilePhoto godoc
-// @Summary Update profile photo
-// @Description Upload profile photo
-// @Tags Authentication
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param photo formData file true "Photo file"
-// @Success 200 {object} models.Response
-// @Router /auth/profile/photo [post]
-func (ctrl *AuthController) UpdateProfilePhoto(c *gin.Context) {
-	userID := c.GetInt("user_id")
-
+	photoURL := ""
 	file, err := c.FormFile("photo")
-	if err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Photo required"})
-		return
+	if err == nil {
+		uploadedPath, uploadErr := uploadFile(c, file, "profiles")
+		if uploadErr != nil {
+			c.JSON(400, gin.H{"success": false, "message": uploadErr.Error()})
+			return
+		}
+
+		photoURL = uploadedPath
+
+		var oldPhoto string
+		models.DB.QueryRow(context.Background(),
+			"SELECT COALESCE(photo_url, '') FROM user_profiles WHERE user_id=$1", userID).Scan(&oldPhoto)
+		if oldPhoto != "" {
+			deleteFile(oldPhoto)
+		}
 	}
 
-	photoURL, err := uploadFile(c, file, "profiles")
-	if err != nil {
-		c.JSON(400, gin.H{"success": false, "message": err.Error()})
-		return
+	if photoURL != "" {
+		models.DB.Exec(context.Background(),
+			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, photo_url=$4, updated_at=$5 WHERE user_id=$6",
+			fullName, phone, address, photoURL, time.Now(), userID)
+	} else {
+		models.DB.Exec(context.Background(),
+			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
+			fullName, phone, address, time.Now(), userID)
 	}
 
-	var oldPhoto string
-	models.DB.QueryRow(context.Background(), "SELECT photo_url FROM user_profiles WHERE user_id=$1", userID).Scan(&oldPhoto)
-	deleteFile(oldPhoto)
+	responseData := gin.H{
+		"success": true,
+		"message": "Profile updated",
+	}
 
-	models.DB.Exec(context.Background(),
-		"UPDATE user_profiles SET photo_url=$1, updated_at=$2 WHERE user_id=$3",
-		photoURL, time.Now(), userID)
+	if photoURL != "" {
+		responseData["data"] = gin.H{"photo_url": photoURL}
+	}
 
-	c.JSON(200, gin.H{"success": true, "message": "Photo updated", "data": gin.H{"photo_url": photoURL}})
+	c.JSON(200, responseData)
 }
 
 // ChangePassword godoc
