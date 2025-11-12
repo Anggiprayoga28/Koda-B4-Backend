@@ -12,7 +12,7 @@ import (
 
 type TransactionController struct{}
 
-// @Summary Create transaction from cart
+// @Summary Create transaction
 // @Description Create order
 // @Tags Transactions
 // @Security BearerAuth
@@ -29,20 +29,59 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 	ctx := context.Background()
 	userID := c.GetInt("user_id")
 
-	rows, err := models.DB.Query(ctx,
-		"SELECT ci.id, ci.product_id, p.name, p.price, ci.quantity, p.stock, COALESCE(ci.size_id,0), COALESCE(ci.temperature_id,0), COALESCE(ci.variant_id,0), COALESCE(ps.price_adjustment,0), COALESCE(pt.price,0), COALESCE(pv.price,0), COALESCE(p.is_flash_sale,false) FROM cart_items ci JOIN products p ON ci.product_id=p.id LEFT JOIN product_sizes ps ON ci.size_id=ps.id LEFT JOIN product_temperatures pt ON ci.temperature_id=pt.id LEFT JOIN product_variants pv ON ci.variant_id=pv.id WHERE ci.user_id=$1 AND p.is_active=true",
-		userID)
+	tx, err := models.DB.Begin(ctx)
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Failed to get cart"})
+		c.JSON(500, gin.H{"success": false, "message": "Failed to start transaction"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx,
+		`SELECT 
+			ci.id, 
+			ci.product_id, 
+			p.name, 
+			p.price, 
+			ci.quantity, 
+			p.stock,
+			ci.size_id,
+			ci.temperature_id,
+			ci.variant_id,
+			p.is_flash_sale
+		FROM cart_items ci 
+		JOIN products p ON ci.product_id = p.id 
+		WHERE ci.user_id = $1
+		FOR UPDATE`,
+		userID)
+
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Query error: %v", err)})
 		return
 	}
 	defer rows.Close()
 
-	items := []models.CartItem{}
+	type CartItem struct {
+		CartID      int
+		ProductID   int
+		Name        string
+		Price       int
+		Qty         int
+		Stock       int
+		SizeID      *int
+		TempID      *int
+		VariantID   *int
+		IsFlashSale bool
+	}
+
+	items := []CartItem{}
 	for rows.Next() {
-		var i models.CartItem
-		rows.Scan(&i.CartID, &i.ProductID, &i.Name, &i.Price, &i.Qty, &i.Stock,
-			&i.SizeID, &i.TempID, &i.VariantID, &i.SizeAdj, &i.TempPrice, &i.VariantPrice, &i.IsFlashSale)
+		var i CartItem
+		err = rows.Scan(&i.CartID, &i.ProductID, &i.Name, &i.Price, &i.Qty, &i.Stock,
+			&i.SizeID, &i.TempID, &i.VariantID, &i.IsFlashSale)
+		if err != nil {
+			c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Scan error: %v", err)})
+			return
+		}
 
 		if i.Stock < i.Qty {
 			c.JSON(400, gin.H{"success": false, "message": fmt.Sprintf("Insufficient stock for %s", i.Name)})
@@ -50,10 +89,29 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 		}
 		items = append(items, i)
 	}
+	rows.Close()
 
 	if len(items) == 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Cart is empty"})
 		return
+	}
+
+	for idx := range items {
+		sizeAdj := 0
+		tempPrice := 0
+		variantPrice := 0
+
+		if items[idx].SizeID != nil && *items[idx].SizeID > 0 {
+			tx.QueryRow(ctx, "SELECT COALESCE(price_adjustment, 0) FROM product_sizes WHERE id=$1", *items[idx].SizeID).Scan(&sizeAdj)
+		}
+		if items[idx].TempID != nil && *items[idx].TempID > 0 {
+			tx.QueryRow(ctx, "SELECT COALESCE(price, 0) FROM product_temperatures WHERE id=$1", *items[idx].TempID).Scan(&tempPrice)
+		}
+		if items[idx].VariantID != nil && *items[idx].VariantID > 0 {
+			tx.QueryRow(ctx, "SELECT COALESCE(price, 0) FROM product_variants WHERE id=$1", *items[idx].VariantID).Scan(&variantPrice)
+		}
+
+		items[idx].Price += sizeAdj + tempPrice + variantPrice
 	}
 
 	req := models.CheckoutRequest{
@@ -69,7 +127,7 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 
 	if req.Email == "" || req.FullName == "" || req.Address == "" {
 		var pe, pn, pa string
-		models.DB.QueryRow(ctx, "SELECT u.email, COALESCE(p.full_name,''), COALESCE(p.address,'') FROM users u LEFT JOIN user_profiles p ON u.id=p.user_id WHERE u.id=$1", userID).Scan(&pe, &pn, &pa)
+		tx.QueryRow(ctx, "SELECT u.email, COALESCE(p.full_name,''), COALESCE(p.address,'') FROM users u LEFT JOIN user_profiles p ON u.id=p.user_id WHERE u.id=$1", userID).Scan(&pe, &pn, &pa)
 
 		if req.Email == "" {
 			req.Email = pe
@@ -99,7 +157,7 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 
 	subtotal := 0
 	for _, i := range items {
-		subtotal += (i.Price + i.SizeAdj + i.TempPrice + i.VariantPrice) * i.Qty
+		subtotal += i.Price * i.Qty
 	}
 	total := subtotal + deliveryFee
 
@@ -107,26 +165,49 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 	now := time.Now()
 
 	var orderID int
-	err = models.DB.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		"INSERT INTO orders (order_number, user_id, status, delivery_address, delivery_method_id, subtotal, delivery_fee, tax_amount, total, payment_method_id, order_date, created_at, updated_at) VALUES ($1,$2,'pending',$3,1,$4,$5,0,$6,$7,$8,$9,$10) RETURNING id",
 		orderNum, userID, req.Address, subtotal, deliveryFee, total, req.PaymentMethod, now, now, now).Scan(&orderID)
 
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Failed to create order"})
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to create order: %v", err)})
 		return
 	}
 
 	for _, i := range items {
-		unitPrice := i.Price + i.SizeAdj + i.TempPrice + i.VariantPrice
+		var sizeID, tempID interface{}
+		if i.SizeID != nil && *i.SizeID > 0 {
+			sizeID = *i.SizeID
+		}
+		if i.TempID != nil && *i.TempID > 0 {
+			tempID = *i.TempID
+		}
 
-		models.DB.Exec(ctx,
-			"INSERT INTO order_items (order_id, product_id, quantity, size_id, temperature_id, unit_price, is_flash_sale, created_at) VALUES ($1,$2,$3,NULLIF($4,0),NULLIF($5,0),$6,$7,$8)",
-			orderID, i.ProductID, i.Qty, i.SizeID, i.TempID, unitPrice, i.IsFlashSale, now)
+		_, err = tx.Exec(ctx,
+			"INSERT INTO order_items (order_id, product_id, quantity, size_id, temperature_id, unit_price, is_flash_sale, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+			orderID, i.ProductID, i.Qty, sizeID, tempID, i.Price, i.IsFlashSale, now)
+		if err != nil {
+			c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to create order items: %v", err)})
+			return
+		}
 
-		models.DB.Exec(ctx, "UPDATE products SET stock=stock-$1, updated_at=$2 WHERE id=$3", i.Qty, now, i.ProductID)
+		_, err = tx.Exec(ctx, "UPDATE products SET stock=stock-$1, updated_at=$2 WHERE id=$3", i.Qty, now, i.ProductID)
+		if err != nil {
+			c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to update stock: %v", err)})
+			return
+		}
 	}
 
-	models.DB.Exec(ctx, "DELETE FROM cart_items WHERE user_id=$1", userID)
+	_, err = tx.Exec(ctx, "DELETE FROM cart_items WHERE user_id=$1", userID)
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to clear cart: %v", err)})
+		return
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to commit: %v", err)})
+		return
+	}
 
 	c.JSON(201, gin.H{
 		"success": true,
