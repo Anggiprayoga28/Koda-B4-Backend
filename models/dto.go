@@ -104,3 +104,31 @@ type DashboardStats struct {
 	CompletedOrders int `json:"completed_orders"`
 	TotalRevenue    int `json:"total_revenue"`
 }
+
+type CartItem struct {
+	CartID, ProductID, Qty, Stock, SizeID, TempID, VariantID int
+	Name                                                     string
+	Price, SizeAdj, TempPrice, VariantPrice                  int
+	IsFlashSale                                              bool
+}
+
+type CheckoutRequest struct {
+	Email          string `json:"email"`
+	FullName       string `json:"full_name"`
+	Address        string `json:"address"`
+	DeliveryMethod string `json:"delivery_method"`
+	PaymentMethod  int    `json:"payment_method_id"`
+}
+
+type TransactionResponse struct {
+	ID             int    `json:"id"`
+	OrderNumber    string `json:"order_number"`
+	Status         string `json:"status"`
+	Subtotal       int    `json:"subtotal"`
+	DeliveryFee    int    `json:"delivery_fee"`
+	Total          int    `json:"total"`
+	Email          string `json:"email"`
+	FullName       string `json:"full_name"`
+	Address        string `json:"address"`
+	DeliveryMethod string `json:"delivery_method"`
+}
