@@ -16,6 +16,7 @@ func SetupRoutes(router *gin.Engine) {
 	orderCtrl := &controllers.OrderController{}
 	categoryCtrl := &controllers.CategoryController{}
 	productDetailCtrl := &controllers.ProductDetailController{}
+	transactionCtrl := &controllers.TransactionController{}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
@@ -52,6 +53,12 @@ func SetupRoutes(router *gin.Engine) {
 	orderRoutes.Use(middleware.AuthMiddleware())
 	{
 		orderRoutes.POST("", orderCtrl.CreateOrder)
+	}
+
+	transactionRoutes := router.Group("/transactions")
+	transactionRoutes.Use(middleware.AuthMiddleware())
+	{
+		transactionRoutes.POST("/checkout", transactionCtrl.Checkout)
 	}
 
 	admin := router.Group("/admin")
