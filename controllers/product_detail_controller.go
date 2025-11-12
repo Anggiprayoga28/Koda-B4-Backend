@@ -122,6 +122,7 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 	})
 }
 
+// Create cart
 // @Summary Add to cart with variants
 // @Description Add product to cart with size and temperature options
 // @Tags Cart
@@ -165,6 +166,7 @@ func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
 	c.JSON(201, gin.H{"success": true, "message": "Added to cart"})
 }
 
+// Get user cart
 // @Summary Get user cart
 // @Description Get all cart items for current user
 // @Tags Cart
@@ -177,7 +179,7 @@ func (ctrl *ProductDetailController) GetCart(c *gin.Context) {
 
 	rows, _ := models.DB.Query(context.Background(),
 		`SELECT ci.id, ci.product_id, p.name, p.price, ci.quantity, 
-		COALESCE(ps.name,''), COALESCE(ps.price_adjustment,0),
+		COALESCE(ps.name,''),
 		COALESCE(pt.name,''), COALESCE(p.image_url,'')
 		FROM cart_items ci
 		JOIN products p ON ci.product_id=p.id
@@ -187,24 +189,26 @@ func (ctrl *ProductDetailController) GetCart(c *gin.Context) {
 	defer rows.Close()
 
 	items := []gin.H{}
-	total := 0
 	for rows.Next() {
-		var id, pid, price, qty, adj int
+		var id, pid, price, qty int
 		var pname, sname, tname, img string
-		rows.Scan(&id, &pid, &pname, &price, &qty, &sname, &adj, &tname, &img)
-
-		itemPrice := (price + adj) * qty
-		total += itemPrice
+		rows.Scan(&id, &pid, &pname, &price, &qty, &sname, &tname, &img)
 
 		items = append(items, gin.H{
-			"id": id, "product_id": pid, "name": pname, "price": price,
-			"quantity": qty, "size": sname, "temperature": tname,
-			"price_adjustment": adj, "subtotal": itemPrice, "image_url": img,
+			"id":          id,
+			"product_id":  pid,
+			"name":        pname,
+			"price":       price,
+			"quantity":    qty,
+			"size":        sname,
+			"temperature": tname,
+			"image_url":   img,
 		})
 	}
 
 	c.JSON(200, gin.H{
-		"success": true, "message": "Cart retrieved",
-		"data": gin.H{"items": items, "total": total},
+		"success": true,
+		"message": "Cart retrieved",
+		"data":    gin.H{"items": items},
 	})
 }
