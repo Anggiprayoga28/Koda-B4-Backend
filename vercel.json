@@ -1,9 +1,18 @@
 {
-    "trailingSlash": false,
-    "rewrites": [
-        {
-            "source": "/(.*)",
-            "destination": "/api/entrypoint.go"
-        }
-    ]
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/entrypoint.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/entrypoint.go"
+    }
+  ],
+  "env": {
+    "GO_ENV": "production"
+  }
 }
