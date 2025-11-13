@@ -65,7 +65,6 @@ func SetupRoutes(router *gin.Engine) {
 	historyRoutes.Use(middleware.AuthMiddleware())
 	{
 		historyRoutes.GET("", historyCtrl.GetHistory)
-		historyRoutes.GET("/:id", historyCtrl.GetOrderDetail)
 	}
 
 	admin := router.Group("/admin")
