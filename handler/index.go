@@ -1,41 +1,20 @@
 package handler
 
 import (
-	"coffee-shop/middleware"
-	"coffee-shop/models"
-	"coffee-shop/routes"
-	"log"
+	"encoding/json"
 	"net/http"
-	"sync"
-
-	_ "coffee-shop/docs"
-
-	"github.com/gin-gonic/gin"
-)
-
-var (
-	app  *gin.Engine
-	once sync.Once
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	once.Do(func() {
-		log.Println("Initializing database")
-		models.InitDB()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
-		log.Println("Initializing Redis")
-		models.InitRedis()
+	response := map[string]interface{}{
+		"status":  "ok",
+		"message": "API is working",
+		"path":    r.URL.Path,
+		"method":  r.Method,
+	}
 
-		gin.SetMode(gin.ReleaseMode)
-
-		app = gin.New()
-		app.Use(gin.Recovery())
-		app.Use(middleware.CORSMiddleware())
-
-		routes.SetupRoutes(app)
-
-		log.Println("Server initialized")
-	})
-
-	app.ServeHTTP(w, r)
+	json.NewEncoder(w).Encode(response)
 }
