@@ -1,14 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api"
-    }
-  ],
-  "functions": {
-    "api/index.go": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  }
+    { "source": "/(.*)", "destination": "/api" }
+  ]
 }
