@@ -164,10 +164,16 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 	orderNum := fmt.Sprintf("ORD-%d", time.Now().Unix())
 	now := time.Now()
 
+	var statusID int
+	err = tx.QueryRow(ctx, "SELECT id FROM order_status WHERE name='pending' LIMIT 1").Scan(&statusID)
+	if err != nil {
+		statusID = 1
+	}
+
 	var orderID int
 	err = tx.QueryRow(ctx,
-		"INSERT INTO orders (order_number, user_id, status, delivery_address, delivery_method_id, subtotal, delivery_fee, tax_amount, total, payment_method_id, order_date, created_at, updated_at) VALUES ($1,$2,'pending',$3,1,$4,$5,0,$6,$7,$8,$9,$10) RETURNING id",
-		orderNum, userID, req.Address, subtotal, deliveryFee, total, req.PaymentMethod, now, now, now).Scan(&orderID)
+		"INSERT INTO orders (order_number, user_id, status_id, delivery_address, delivery_method_id, subtotal, delivery_fee, tax_amount, total, payment_method_id, order_date, created_at, updated_at) VALUES ($1,$2,$3,$4,1,$5,$6,0,$7,$8,$9,$10,$11) RETURNING id",
+		orderNum, userID, statusID, req.Address, subtotal, deliveryFee, total, req.PaymentMethod, now, now, now).Scan(&orderID)
 
 	if err != nil {
 		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to create order: %v", err)})
