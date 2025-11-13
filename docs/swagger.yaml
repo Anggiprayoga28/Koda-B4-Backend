@@ -818,6 +818,31 @@ paths:
       summary: Create order
       tags:
       - Orders
+  /orders/{id}/detail:
+    get:
+      description: Get complete order information with items
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get order detail
+      tags:
+      - History
   /products:
     get:
       description: Get paginated list of products
