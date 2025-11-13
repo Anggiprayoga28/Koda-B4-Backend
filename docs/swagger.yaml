@@ -351,6 +351,54 @@ paths:
       summary: Update product
       tags:
       - Admin - Products
+  /admin/profile:
+    get:
+      description: Get current admin profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Get admin profile
+      tags:
+      - Admin - Profile
+    patch:
+      consumes:
+      - multipart/form-data
+      description: Update admin profile information
+      parameters:
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
+      - description: Profile photo
+        in: formData
+        name: photo
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Update admin profile
+      tags:
+      - Admin - Profile
   /admin/users:
     get:
       description: Get paginated users (Admin)
@@ -569,54 +617,6 @@ paths:
       summary: User login
       tags:
       - Authentication
-  /auth/profile:
-    get:
-      description: Get current user profile
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Get user profile
-      tags:
-      - Authentication
-    patch:
-      consumes:
-      - multipart/form-data
-      description: Update user profile information
-      parameters:
-      - description: Full Name
-        in: formData
-        name: full_name
-        type: string
-      - description: Phone
-        in: formData
-        name: phone
-        type: string
-      - description: Address
-        in: formData
-        name: address
-        type: string
-      - description: Profile photo
-        in: formData
-        name: photo
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Update profile
-      tags:
-      - Authentication
   /auth/register:
     post:
       consumes:
@@ -750,6 +750,71 @@ paths:
       summary: Get category by ID
       tags:
       - categories
+  /history:
+    get:
+      description: Get paginated order history
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: 'Filter by start date (format: 2006-01-02)'
+        in: query
+        name: start_date
+        type: string
+      - description: 'Filter by end date (format: 2006-01-02)'
+        in: query
+        name: end_date
+        type: string
+      - description: 'Filter by month (format: January 2023)'
+        in: query
+        name: month
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaginationResponse'
+      security:
+      - BearerAuth: []
+      summary: Get order history
+      tags:
+      - History
+  /history/{id}:
+    get:
+      description: Get detailed information about a specific order
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get order detail
+      tags:
+      - History
   /orders:
     post:
       consumes:
@@ -909,6 +974,54 @@ paths:
       summary: Filter products
       tags:
       - Products
+  /profile:
+    get:
+      description: Get current user profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - Profile
+    patch:
+      consumes:
+      - multipart/form-data
+      description: Update user profile information
+      parameters:
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
+      - description: Profile photo
+        in: formData
+        name: photo
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Update profile
+      tags:
+      - Profile
   /transactions/checkout:
     post:
       consumes:
