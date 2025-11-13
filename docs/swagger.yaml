@@ -790,31 +790,6 @@ paths:
       summary: Get order history
       tags:
       - History
-  /history/{id}:
-    get:
-      description: Get detailed information about a specific order
-      parameters:
-      - description: Order ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get order detail
-      tags:
-      - History
   /orders:
     post:
       consumes:
