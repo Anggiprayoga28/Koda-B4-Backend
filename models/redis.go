@@ -17,8 +17,8 @@ func InitRedis() {
 	if redisURL != "" {
 		parsedOpt, err := redis.ParseURL(redisURL)
 		if err != nil {
-			log.Println("⚠ Failed to parse Redis URL:", err)
-			log.Println("⚠ Running without cache")
+			log.Println("Failed to parse Redis URL:", err)
+			log.Println("Running without cache")
 			return
 		}
 		opt = parsedOpt
