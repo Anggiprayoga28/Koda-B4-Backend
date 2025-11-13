@@ -1,21 +1,16 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/entrypoint.go",
-      "use": "@vercel/go"
+  "functions": {
+    "api/entrypoint.go": {
+      "runtime": "vercel-go@2.0.0",
+      "memory": 1024,
+      "maxDuration": 30
     }
-  ],
+  },
   "routes": [
     {
       "src": "/(.*)",
       "dest": "/api/entrypoint.go"
     }
-  ],
-  "functions": {
-    "api/entrypoint.go": {
-      "memory": 1024,
-      "maxDuration": 30
-    }
-  }
+  ]
 }
