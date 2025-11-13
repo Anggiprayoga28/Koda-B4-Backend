@@ -32,7 +32,7 @@ func InitRedis() {
 		}
 	}
 
-	opt.DisableIndentity = true
+	opt.IdentitySuffix = ""
 
 	RedisClient = redis.NewClient(opt)
 
