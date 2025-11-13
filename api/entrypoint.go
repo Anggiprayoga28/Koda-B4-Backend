@@ -17,8 +17,10 @@ var (
 )
 
 func init() {
+	log.Println("Initializing database")
 	models.InitDB()
 
+	log.Println("Initializing Redis")
 	models.InitRedis()
 
 	gin.SetMode(gin.ReleaseMode)

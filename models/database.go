@@ -19,12 +19,14 @@ func InitDB() {
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
+		sslmode := getEnv("DB_SSLMODE", "require")
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 			getEnv("DB_HOST", "localhost"),
 			getEnv("DB_PORT", "5432"),
 			getEnv("DB_USER", "user"),
 			getEnv("DB_PASSWORD", ""),
-			getEnv("DB_NAME", "coffee_shop"))
+			getEnv("DB_NAME", "coffee_shop"),
+			sslmode)
 	}
 
 	var err error
@@ -37,7 +39,7 @@ func InitDB() {
 		log.Fatal("DB ping failed:", err)
 	}
 
-	log.Println("Database connected")
+	log.Println("✓ Database connected")
 }
 
 func CloseDB() {
