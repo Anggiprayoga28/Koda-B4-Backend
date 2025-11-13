@@ -13,14 +13,19 @@ import (
 var DB *pgxpool.Pool
 
 func InitDB() {
-	godotenv.Load()
+	if os.Getenv("GO_ENV") != "production" {
+		godotenv.Load()
+	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		getEnv("DB_HOST", "localhost"),
-		getEnv("DB_PORT", "5454"),
-		getEnv("DB_USER", "anggi"),
-		getEnv("DB_PASSWORD", ""),
-		getEnv("DB_NAME", "coffee_shop"))
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
+			getEnv("DB_HOST", "localhost"),
+			getEnv("DB_PORT", "5432"),
+			getEnv("DB_USER", "user"),
+			getEnv("DB_PASSWORD", ""),
+			getEnv("DB_NAME", "coffee_shop"))
+	}
 
 	var err error
 	DB, err = pgxpool.New(context.Background(), dsn)
