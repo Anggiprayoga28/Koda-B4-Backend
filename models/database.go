@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -13,33 +14,56 @@ import (
 var DB *pgxpool.Pool
 
 func InitDB() {
-	if os.Getenv("GO_ENV") != "production" {
+	if os.Getenv("VERCEL") == "" {
 		godotenv.Load()
 	}
 
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		sslmode := getEnv("DB_SSLMODE", "require")
+	var dsn string
+
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+		dsn = databaseURL
+		log.Println("Using DATABASE_URL for connection")
+	} else {
+		sslMode := getEnv("DB_SSLMODE", "disable")
 		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 			getEnv("DB_HOST", "localhost"),
-			getEnv("DB_PORT", "5432"),
-			getEnv("DB_USER", "user"),
+			getEnv("DB_PORT", "5454"),
+			getEnv("DB_USER", "anggi"),
 			getEnv("DB_PASSWORD", ""),
 			getEnv("DB_NAME", "coffee_shop"),
-			sslmode)
+			sslMode)
+		log.Println("Using individual env vars for connection")
 	}
 
-	var err error
-	DB, err = pgxpool.New(context.Background(), dsn)
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		log.Fatal("Failed to parse DB config:", err)
+	}
+
+	if os.Getenv("VERCEL") != "" {
+		config.MaxConns = 5
+		config.MinConns = 0
+		config.MaxConnLifetime = time.Minute * 5
+		config.MaxConnIdleTime = time.Minute * 1
+		config.HealthCheckPeriod = time.Minute * 1
+	} else {
+		config.MaxConns = 25
+		config.MinConns = 5
+	}
+
+	DB, err = pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		log.Fatal("DB connection failed:", err)
 	}
 
-	if err = DB.Ping(context.Background()); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err = DB.Ping(ctx); err != nil {
 		log.Fatal("DB ping failed:", err)
 	}
 
-	log.Println("✓ Database connected")
+	log.Println("Database connected successfully")
 }
 
 func CloseDB() {

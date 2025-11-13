@@ -12,7 +12,10 @@
       "dest": "/api/entrypoint.go"
     }
   ],
-  "env": {
-    "GO_ENV": "production"
+  "functions": {
+    "api/entrypoint.go": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
   }
 }
