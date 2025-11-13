@@ -11,9 +11,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"status":  "ok",
-		"message": "API is working",
+		"message": "Coffee Shop API",
 		"path":    r.URL.Path,
-		"method":  r.Method,
 	}
 
 	json.NewEncoder(w).Encode(response)
