@@ -265,11 +265,11 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 // GetProfile godoc
 // @Summary Get user profile
 // @Description Get current user profile
-// @Tags Authentication
+// @Tags Profile
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} models.Response
-// @Router /auth/profile [get]
+// @Router /profile [get]
 func (ctrl *AuthController) GetProfile(c *gin.Context) {
 	userID := c.GetInt("user_id")
 
@@ -298,7 +298,7 @@ func (ctrl *AuthController) GetProfile(c *gin.Context) {
 // UpdateProfile godoc
 // @Summary Update profile
 // @Description Update user profile information
-// @Tags Authentication
+// @Tags Profile
 // @Security BearerAuth
 // @Accept multipart/form-data
 // @Produce json
@@ -307,7 +307,7 @@ func (ctrl *AuthController) GetProfile(c *gin.Context) {
 // @Param address formData string false "Address"
 // @Param photo formData file false "Profile photo"
 // @Success 200 {object} models.Response
-// @Router /auth/profile [patch]
+// @Router /profile [patch]
 func (ctrl *AuthController) UpdateProfile(c *gin.Context) {
 	userID := c.GetInt("user_id")
 
@@ -357,6 +357,110 @@ func (ctrl *AuthController) UpdateProfile(c *gin.Context) {
 	responseData := gin.H{
 		"success": true,
 		"message": "Profile updated",
+	}
+
+	if photoURL != "" {
+		responseData["data"] = gin.H{"photo_url": photoURL}
+	}
+
+	c.JSON(200, responseData)
+}
+
+// GetAdminProfile godoc
+// @Summary Get admin profile
+// @Description Get current admin profile
+// @Tags Admin - Profile
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} models.Response
+// @Router /admin/profile [get]
+func (ctrl *AuthController) GetAdminProfile(c *gin.Context) {
+	userID := c.GetInt("user_id")
+
+	var email, role, fullName, phone, address, photoURL string
+	models.DB.QueryRow(context.Background(),
+		`SELECT u.email, u.role, COALESCE(p.full_name,''), COALESCE(p.phone,''), 
+		COALESCE(p.address,''), COALESCE(p.photo_url,'') 
+		FROM users u LEFT JOIN user_profiles p ON u.id=p.user_id WHERE u.id=$1`,
+		userID).Scan(&email, &role, &fullName, &phone, &address, &photoURL)
+
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Admin profile retrieved",
+		"data": gin.H{
+			"id":        userID,
+			"email":     email,
+			"role":      role,
+			"full_name": fullName,
+			"phone":     phone,
+			"address":   address,
+			"photo_url": photoURL,
+		},
+	})
+}
+
+// UpdateAdminProfile godoc
+// @Summary Update admin profile
+// @Description Update admin profile information
+// @Tags Admin - Profile
+// @Security BearerAuth
+// @Accept multipart/form-data
+// @Produce json
+// @Param full_name formData string false "Full Name"
+// @Param phone formData string false "Phone"
+// @Param address formData string false "Address"
+// @Param photo formData file false "Profile photo"
+// @Success 200 {object} models.Response
+// @Router /admin/profile [patch]
+func (ctrl *AuthController) UpdateAdminProfile(c *gin.Context) {
+	userID := c.GetInt("user_id")
+
+	fullName := strings.TrimSpace(c.PostForm("full_name"))
+	phone := strings.TrimSpace(c.PostForm("phone"))
+	address := strings.TrimSpace(c.PostForm("address"))
+
+	if fullName != "" && len(fullName) < 3 {
+		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
+		return
+	}
+
+	if !isValidPhone(phone) {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
+		return
+	}
+
+	photoURL := ""
+	file, err := c.FormFile("photo")
+	if err == nil {
+		uploadedPath, uploadErr := uploadFile(c, file, "profiles")
+		if uploadErr != nil {
+			c.JSON(400, gin.H{"success": false, "message": uploadErr.Error()})
+			return
+		}
+
+		photoURL = uploadedPath
+
+		var oldPhoto string
+		models.DB.QueryRow(context.Background(),
+			"SELECT COALESCE(photo_url, '') FROM user_profiles WHERE user_id=$1", userID).Scan(&oldPhoto)
+		if oldPhoto != "" {
+			deleteFile(oldPhoto)
+		}
+	}
+
+	if photoURL != "" {
+		models.DB.Exec(context.Background(),
+			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, photo_url=$4, updated_at=$5 WHERE user_id=$6",
+			fullName, phone, address, photoURL, time.Now(), userID)
+	} else {
+		models.DB.Exec(context.Background(),
+			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
+			fullName, phone, address, time.Now(), userID)
+	}
+
+	responseData := gin.H{
+		"success": true,
+		"message": "Admin profile updated",
 	}
 
 	if photoURL != "" {
