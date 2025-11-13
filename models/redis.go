@@ -32,6 +32,8 @@ func InitRedis() {
 		}
 	}
 
+	opt.DisableIndentity = true
+
 	RedisClient = redis.NewClient(opt)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
