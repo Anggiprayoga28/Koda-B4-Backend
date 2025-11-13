@@ -17,6 +17,7 @@ func SetupRoutes(router *gin.Engine) {
 	categoryCtrl := &controllers.CategoryController{}
 	productDetailCtrl := &controllers.ProductDetailController{}
 	transactionCtrl := &controllers.TransactionController{}
+	historyCtrl := &controllers.HistoryController{}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
@@ -60,10 +61,20 @@ func SetupRoutes(router *gin.Engine) {
 		transactionRoutes.POST("/checkout", transactionCtrl.Checkout)
 	}
 
+	historyRoutes := router.Group("/history")
+	historyRoutes.Use(middleware.AuthMiddleware())
+	{
+		historyRoutes.GET("", historyCtrl.GetHistory)
+		historyRoutes.GET("/:id", historyCtrl.GetOrderDetail)
+	}
+
 	admin := router.Group("/admin")
 	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
 	{
 		admin.GET("/dashboard", orderCtrl.GetDashboard)
+
+		admin.GET("/profiles", userCtrl.GetAllUsers)
+		admin.GET("/profiles/:id", userCtrl.GetUserByID)
 
 		admin.GET("/users", userCtrl.GetAllUsers)
 		admin.GET("/users/:id", userCtrl.GetUserByID)
