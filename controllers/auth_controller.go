@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -160,31 +161,90 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 		return
 	}
 
+	if models.DB == nil {
+		log.Println("Database connection is nil")
+		c.JSON(500, gin.H{"success": false, "message": "Database connection not available"})
+		return
+	}
+
+	ctx := context.Background()
+
 	var exists int
-	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", email).Scan(&exists)
+	err := models.DB.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email=$1", email).Scan(&exists)
+	if err != nil {
+		log.Printf("Error checking existing email: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Database error: " + err.Error()})
+		return
+	}
+
 	if exists > 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Email already exists"})
 		return
 	}
 
-	hash, _ := hashPassword(password)
+	hash, err := hashPassword(password)
+	if err != nil {
+		log.Printf("Error hashing password: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Failed to process password"})
+		return
+	}
+
 	now := time.Now()
 
 	var userID int
-	err := models.DB.QueryRow(context.Background(),
+	err = models.DB.QueryRow(ctx,
 		"INSERT INTO users (email, password, role, created_at, updated_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
 		email, hash, role, now, now).Scan(&userID)
 
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Registration failed"})
+		log.Printf("Error inserting user: %v", err)
+		log.Printf(" Email: %s, Role: %s", email, role)
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Registration failed",
+			"error":   err.Error(),
+			"debug": gin.H{
+				"step":  "insert_user",
+				"email": email,
+			},
+		})
 		return
 	}
 
-	models.DB.Exec(context.Background(),
+	log.Printf("User created successfully with ID: %d", userID)
+
+	_, err = models.DB.Exec(ctx,
 		"INSERT INTO user_profiles (user_id, full_name, phone, created_at, updated_at) VALUES ($1,$2,$3,$4,$5)",
 		userID, fullName, phone, now, now)
 
-	token, _ := generateToken(userID, email, role)
+	if err != nil {
+		log.Printf("Error inserting user profile: %v", err)
+		log.Printf("   UserID: %d, FullName: %s", userID, fullName)
+
+		models.DB.Exec(ctx, "DELETE FROM users WHERE id=$1", userID)
+
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Failed to create user profile",
+			"error":   err.Error(),
+			"debug": gin.H{
+				"step":    "insert_profile",
+				"user_id": userID,
+			},
+		})
+		return
+	}
+
+	log.Printf("User profile created for user ID: %d", userID)
+
+	token, err := generateToken(userID, email, role)
+	if err != nil {
+		log.Printf("Error generating token: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Failed to generate token"})
+		return
+	}
+
+	log.Printf("Registration complete for email: %s", email)
 
 	c.JSON(201, gin.H{
 		"success": true,
