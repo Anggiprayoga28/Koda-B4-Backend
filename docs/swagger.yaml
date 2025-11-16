@@ -38,7 +38,7 @@ definitions:
       success:
         type: boolean
     type: object
-host: localhost:8080
+host: harlan-holden-coffee-backend.vercel.app
 info:
   contact: {}
   description: Coffee Shop Management System API Documentation
@@ -1108,7 +1108,6 @@ paths:
       tags:
       - Transactions
 schemes:
-- http
 - https
 securityDefinitions:
   BearerAuth:
