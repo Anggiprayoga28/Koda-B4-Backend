@@ -1,12 +1,16 @@
 {
+    "schemes": [
+        "https"
+    ],
     "swagger": "2.0",
     "info": {
-        "description": "REST API for Coffee Shop Management System",
+        "description": "Coffee Shop Management System API Documentation",
         "title": "Coffee Shop",
+        "termsOfService": "http://swagger.io/terms/",
         "contact": {},
         "version": "1.0"
     },
-    "host": "localhost:8082",
+    "host": "harlan-holden-coffee-backend.vercel.app",
     "basePath": "/",
     "paths": {
         "/admin/categories": {
@@ -1649,6 +1653,7 @@
     },
     "securityDefinitions": {
         "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and JWT token.",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

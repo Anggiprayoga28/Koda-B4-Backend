@@ -38,10 +38,11 @@ definitions:
       success:
         type: boolean
     type: object
-host: localhost:8082
+host: harlan-holden-coffee-backend.vercel.app
 info:
   contact: {}
-  description: REST API for Coffee Shop Management System
+  description: Coffee Shop Management System API Documentation
+  termsOfService: http://swagger.io/terms/
   title: Coffee Shop
   version: "1.0"
 paths:
@@ -1060,8 +1061,11 @@ paths:
       summary: Create transaction
       tags:
       - Transactions
+schemes:
+- https
 securityDefinitions:
   BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
     in: header
     name: Authorization
     type: apiKey
