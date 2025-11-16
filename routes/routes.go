@@ -2,6 +2,7 @@ package routes
 
 import (
 	"coffee-shop/controllers"
+	_ "coffee-shop/docs"
 	"coffee-shop/middleware"
 
 	"github.com/gin-gonic/gin"
