@@ -561,6 +561,24 @@ const docTemplate = `{
                         "description": "Profile photo",
                         "name": "photo",
                         "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Old Password",
+                        "name": "old_password",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "New Password",
+                        "name": "new_password",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Confirm New Password",
+                        "name": "confirm_password",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -812,9 +830,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/change-password": {
+        "/auth/forgot-password": {
             "post": {
-                "description": "Change user password (can be used with or without token)",
+                "description": "Send OTP",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -824,32 +842,12 @@ const docTemplate = `{
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Change password",
+                "summary": "Request password reset",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Email (required if no token)",
+                        "description": "Email",
                         "name": "email",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Old Password",
-                        "name": "old_password",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "New Password",
-                        "name": "new_password",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Confirm New Password",
-                        "name": "confirm_password",
                         "in": "formData",
                         "required": true
                     }
@@ -904,6 +902,101 @@ const docTemplate = `{
                         "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get current user profile",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Get user profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update user profile information and change password",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Update profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Full Name",
+                        "name": "full_name",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Phone",
+                        "name": "phone",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Address",
+                        "name": "address",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Profile photo",
+                        "name": "photo",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Old Password",
+                        "name": "old_password",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "New Password",
+                        "name": "new_password",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Confirm New Password",
+                        "name": "confirm_password",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
                         }
                     }
                 }
@@ -968,6 +1061,59 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/verify-otp": {
+            "post": {
+                "description": "Verify OTP code and immediately reset password",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Verify OTP and reset password",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Email",
+                        "name": "email",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "OTP Code",
+                        "name": "otp",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "New Password",
+                        "name": "new_password",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Confirm Password",
+                        "name": "confirm_password",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
                         }
                     }
                 }
@@ -1456,83 +1602,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/profile": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get current user profile",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "Get user profile",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update user profile information",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "Update profile",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Full Name",
-                        "name": "full_name",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Phone",
-                        "name": "phone",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Address",
-                        "name": "address",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "file",
-                        "description": "Profile photo",
-                        "name": "photo",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/transactions/checkout": {
             "post": {
                 "security": [
@@ -1667,9 +1736,9 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "harlan-holden-coffee-backend.vercel.app",
+	Host:             "localhost:8080",
 	BasePath:         "/",
-	Schemes:          []string{"https"},
+	Schemes:          []string{"http", "https"},
 	Title:            "Coffee Shop",
 	Description:      "Coffee Shop Management System API Documentation",
 	InfoInstanceName: "swagger",

@@ -38,7 +38,7 @@ definitions:
       success:
         type: boolean
     type: object
-host: harlan-holden-coffee-backend.vercel.app
+host: localhost:8080
 info:
   contact: {}
   description: Coffee Shop Management System API Documentation
@@ -388,6 +388,18 @@ paths:
         in: formData
         name: photo
         type: file
+      - description: Old Password
+        in: formData
+        name: old_password
+        type: string
+      - description: New Password
+        in: formData
+        name: new_password
+        type: string
+      - description: Confirm New Password
+        in: formData
+        name: confirm_password
+        type: string
       produces:
       - application/json
       responses:
@@ -553,29 +565,15 @@ paths:
       summary: Update user
       tags:
       - Admin - Users
-  /auth/change-password:
+  /auth/forgot-password:
     post:
       consumes:
       - multipart/form-data
-      description: Change user password (can be used with or without token)
+      description: Send OTP
       parameters:
-      - description: Email (required if no token)
+      - description: Email
         in: formData
         name: email
-        type: string
-      - description: Old Password
-        in: formData
-        name: old_password
-        required: true
-        type: string
-      - description: New Password
-        in: formData
-        name: new_password
-        required: true
-        type: string
-      - description: Confirm New Password
-        in: formData
-        name: confirm_password
         required: true
         type: string
       produces:
@@ -585,7 +583,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Response'
-      summary: Change password
+      summary: Request password reset
       tags:
       - Authentication
   /auth/login:
@@ -618,6 +616,66 @@ paths:
       summary: User login
       tags:
       - Authentication
+  /auth/profile:
+    get:
+      description: Get current user profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - Profile
+    patch:
+      consumes:
+      - multipart/form-data
+      description: Update user profile information and change password
+      parameters:
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
+      - description: Profile photo
+        in: formData
+        name: photo
+        type: file
+      - description: Old Password
+        in: formData
+        name: old_password
+        type: string
+      - description: New Password
+        in: formData
+        name: new_password
+        type: string
+      - description: Confirm New Password
+        in: formData
+        name: confirm_password
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Update profile
+      tags:
+      - Profile
   /auth/register:
     post:
       consumes:
@@ -659,6 +717,42 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Register new user
+      tags:
+      - Authentication
+  /auth/verify-otp:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Verify OTP code and immediately reset password
+      parameters:
+      - description: Email
+        in: formData
+        name: email
+        required: true
+        type: string
+      - description: OTP Code
+        in: formData
+        name: otp
+        required: true
+        type: string
+      - description: New Password
+        in: formData
+        name: new_password
+        required: true
+        type: string
+      - description: Confirm Password
+        in: formData
+        name: confirm_password
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Verify OTP and reset password
       tags:
       - Authentication
   /cart:
@@ -975,54 +1069,6 @@ paths:
       summary: Filter products
       tags:
       - Products
-  /profile:
-    get:
-      description: Get current user profile
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Get user profile
-      tags:
-      - Profile
-    patch:
-      consumes:
-      - multipart/form-data
-      description: Update user profile information
-      parameters:
-      - description: Full Name
-        in: formData
-        name: full_name
-        type: string
-      - description: Phone
-        in: formData
-        name: phone
-        type: string
-      - description: Address
-        in: formData
-        name: address
-        type: string
-      - description: Profile photo
-        in: formData
-        name: photo
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Update profile
-      tags:
-      - Profile
   /transactions/checkout:
     post:
       consumes:
@@ -1062,6 +1108,7 @@ paths:
       tags:
       - Transactions
 schemes:
+- http
 - https
 securityDefinitions:
   BearerAuth:
