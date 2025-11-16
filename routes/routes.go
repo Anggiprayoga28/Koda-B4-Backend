@@ -26,7 +26,9 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.POST("/auth/register", authCtrl.Register)
 	router.POST("/auth/login", authCtrl.Login)
-	router.POST("/auth/change-password", authCtrl.ChangePassword)
+
+	router.POST("/auth/forgot-password", authCtrl.ForgotPassword)
+	router.POST("/auth/verify-otp", authCtrl.VerifyOTP)
 
 	router.GET("/categories", categoryCtrl.GetCategories)
 	router.GET("/categories/:id", categoryCtrl.GetCategoryByID)
@@ -74,6 +76,9 @@ func SetupRoutes(router *gin.Engine) {
 	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
 	{
 		admin.GET("/dashboard", orderCtrl.GetDashboard)
+
+		admin.GET("/profile", authCtrl.GetAdminProfile)
+		admin.PATCH("/profile", authCtrl.UpdateAdminProfile)
 
 		admin.GET("/profiles", userCtrl.GetAllUsers)
 		admin.GET("/profiles/:id", userCtrl.GetUserByID)
