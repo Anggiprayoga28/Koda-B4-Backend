@@ -3,6 +3,7 @@ package controllers
 import (
 	"coffee-shop/models"
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -137,39 +138,132 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 // @Success 201 {object} models.Response
 // @Router /cart [post]
 func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
+	ctx := context.Background()
 	userID := c.GetInt("user_id")
-	productID, _ := strconv.Atoi(c.PostForm("product_id"))
-	quantity, _ := strconv.Atoi(c.PostForm("quantity"))
-	sizeID, _ := strconv.Atoi(c.PostForm("size_id"))
-	tempID, _ := strconv.Atoi(c.PostForm("temperature_id"))
-	variantID, _ := strconv.Atoi(c.PostForm("variant_id"))
 
-	if productID <= 0 || quantity <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid product or quantity"})
+	productIDStr := c.PostForm("product_id")
+	quantityStr := c.PostForm("quantity")
+	sizeIDStr := c.PostForm("size_id")
+	tempIDStr := c.PostForm("temperature_id")
+	variantIDStr := c.PostForm("variant_id")
+
+	if productIDStr == "" || quantityStr == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Product ID and quantity are required"})
+		return
+	}
+
+	productID, err := strconv.Atoi(productIDStr)
+	if err != nil || productID <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid product ID"})
+		return
+	}
+
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil || quantity <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid quantity"})
+		return
+	}
+
+	var sizeID, tempID, variantID *int
+
+	if sizeIDStr != "" {
+		if val, err := strconv.Atoi(sizeIDStr); err == nil && val > 0 {
+			sizeID = &val
+		}
+	}
+
+	if tempIDStr != "" {
+		if val, err := strconv.Atoi(tempIDStr); err == nil && val > 0 {
+			tempID = &val
+		}
+	}
+
+	if variantIDStr != "" {
+		if val, err := strconv.Atoi(variantIDStr); err == nil && val > 0 {
+			variantID = &val
+		}
+	}
+
+	var productExists bool
+	var stock int
+	err = models.DB.QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM products WHERE id=$1 AND is_active=true), COALESCE((SELECT stock FROM products WHERE id=$1), 0)",
+		productID).Scan(&productExists, &stock)
+
+	if err != nil || !productExists {
+		c.JSON(400, gin.H{"success": false, "message": "Product not found or inactive"})
+		return
+	}
+
+	if stock < quantity {
+		c.JSON(400, gin.H{"success": false, "message": fmt.Sprintf("Insufficient stock. Available: %d", stock)})
 		return
 	}
 
 	var existingID, existingQty int
-	err := models.DB.QueryRow(context.Background(),
-		`SELECT id, quantity FROM cart_items 
-		WHERE user_id=$1 AND product_id=$2 
-		AND COALESCE(size_id,0)=$3 
-		AND COALESCE(temperature_id,0)=$4
-		AND COALESCE(variant_id,0)=$5`,
+	checkQuery := `
+		SELECT id, quantity FROM cart_items 
+		WHERE user_id=$1 
+		AND product_id=$2 
+		AND ($3::int IS NULL AND size_id IS NULL OR size_id = $3)
+		AND ($4::int IS NULL AND temperature_id IS NULL OR temperature_id = $4)
+		AND ($5::int IS NULL AND variant_id IS NULL OR variant_id = $5)
+	`
+
+	err = models.DB.QueryRow(ctx, checkQuery,
 		userID, productID, sizeID, tempID, variantID).Scan(&existingID, &existingQty)
 
 	if err == nil {
-		models.DB.Exec(context.Background(),
+		newQty := existingQty + quantity
+
+		if stock < newQty {
+			c.JSON(400, gin.H{"success": false, "message": fmt.Sprintf("Insufficient stock. Available: %d, Current cart: %d", stock, existingQty)})
+			return
+		}
+
+		_, err = models.DB.Exec(ctx,
 			"UPDATE cart_items SET quantity=$1, updated_at=NOW() WHERE id=$2",
-			existingQty+quantity, existingID)
-	} else {
-		models.DB.Exec(context.Background(),
-			`INSERT INTO cart_items (user_id, product_id, quantity, size_id, temperature_id, variant_id, created_at, updated_at) 
-			VALUES ($1,$2,$3,NULLIF($4,0),NULLIF($5,0),NULLIF($6,0),NOW(),NOW())`,
-			userID, productID, quantity, sizeID, tempID, variantID)
+			newQty, existingID)
+
+		if err != nil {
+			c.JSON(500, gin.H{"success": false, "message": "Failed to update cart: " + err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "Cart updated successfully",
+			"data": gin.H{
+				"cart_item_id": existingID,
+				"quantity":     newQty,
+			},
+		})
+		return
 	}
 
-	c.JSON(201, gin.H{"success": true, "message": "Added to cart"})
+	insertQuery := `
+		INSERT INTO cart_items (user_id, product_id, quantity, size_id, temperature_id, variant_id, created_at, updated_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		RETURNING id
+	`
+
+	var newCartID int
+	err = models.DB.QueryRow(ctx, insertQuery,
+		userID, productID, quantity, sizeID, tempID, variantID).Scan(&newCartID)
+
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": "Failed to add to cart: " + err.Error()})
+		return
+	}
+
+	c.JSON(201, gin.H{
+		"success": true,
+		"message": "Added to cart successfully",
+		"data": gin.H{
+			"cart_item_id": newCartID,
+			"quantity":     quantity,
+		},
+	})
 }
 
 // Get user cart
@@ -181,30 +275,53 @@ func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
 // @Success 200 {object} models.Response
 // @Router /cart [get]
 func (ctrl *ProductDetailController) GetCart(c *gin.Context) {
+	ctx := context.Background()
 	userID := c.GetInt("user_id")
 
-	rows, _ := models.DB.Query(context.Background(),
-		`SELECT ci.id, ci.product_id, p.name, p.price, ci.quantity, 
-		COALESCE(ps.name,''), COALESCE(ps.price_adjustment,0),
-		COALESCE(pt.name,''), COALESCE(pt.price,0),
-		COALESCE(pv.name,''), COALESCE(pv.price,0),
-		COALESCE(p.image_url,'')
+	rows, err := models.DB.Query(ctx,
+		`SELECT 
+			ci.id, 
+			ci.product_id, 
+			p.name, 
+			p.price, 
+			ci.quantity, 
+			COALESCE(ps.name,'') as size_name, 
+			COALESCE(ps.price_adjustment,0) as size_adj,
+			COALESCE(pt.name,'') as temp_name, 
+			COALESCE(pt.price,0) as temp_price,
+			COALESCE(pv.name,'') as variant_name, 
+			COALESCE(pv.price,0) as variant_price,
+			COALESCE(p.image_url,'') as image_url,
+			p.stock
 		FROM cart_items ci
 		JOIN products p ON ci.product_id=p.id
 		LEFT JOIN product_sizes ps ON ci.size_id=ps.id
 		LEFT JOIN product_temperatures pt ON ci.temperature_id=pt.id
 		LEFT JOIN product_variants pv ON ci.variant_id=pv.id
-		WHERE ci.user_id=$1`, userID)
+		WHERE ci.user_id=$1 
+		AND p.is_active=true
+		ORDER BY ci.created_at DESC`, userID)
+
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": "Failed to retrieve cart: " + err.Error()})
+		return
+	}
 	defer rows.Close()
 
 	items := []gin.H{}
 	subtotal := 0
+
 	for rows.Next() {
-		var id, pid, basePrice, qty, sizeAdj, tempPrice, variantPrice int
+		var id, pid, basePrice, qty, sizeAdj, tempPrice, variantPrice, stock int
 		var pname, sizeName, tempName, variantName, img string
-		rows.Scan(&id, &pid, &pname, &basePrice, &qty,
+
+		err = rows.Scan(&id, &pid, &pname, &basePrice, &qty,
 			&sizeName, &sizeAdj, &tempName, &tempPrice,
-			&variantName, &variantPrice, &img)
+			&variantName, &variantPrice, &img, &stock)
+
+		if err != nil {
+			continue
+		}
 
 		itemPrice := (basePrice + sizeAdj + tempPrice + variantPrice) * qty
 		subtotal += itemPrice
@@ -223,12 +340,16 @@ func (ctrl *ProductDetailController) GetCart(c *gin.Context) {
 			"variant_price":     variantPrice,
 			"subtotal":          itemPrice,
 			"image_url":         img,
+			"stock":             stock,
 		})
 	}
 
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "Cart retrieved",
-		"data":    gin.H{"items": items, "subtotal": subtotal},
+		"data": gin.H{
+			"items":    items,
+			"subtotal": subtotal,
+		},
 	})
 }
