@@ -5,7 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
+	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +18,96 @@ import (
 
 type ProductController struct{}
 
+func (ctrl *ProductController) getPaginationParams(c *gin.Context, defaultLimit int) (page, limit, offset int) {
+	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ = strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(defaultLimit)))
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = defaultLimit
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset = (page - 1) * limit
+	return page, limit, offset
+}
+
+func (ctrl *ProductController) generateProductLinks(c *gin.Context, page, limit, totalPages int) models.PaginationLinks {
+	scheme := "https"
+	if c.Request.TLS == nil {
+		scheme = "http"
+	}
+
+	host := c.Request.Host
+	path := c.Request.URL.Path
+	queryParams := c.Request.URL.Query()
+
+	makeURL := func(pageNum int) string {
+		newParams := url.Values{}
+		for key, values := range queryParams {
+			if key != "page" {
+				for _, value := range values {
+					newParams.Add(key, value)
+				}
+			}
+		}
+		newParams.Set("page", strconv.Itoa(pageNum))
+		newParams.Set("limit", strconv.Itoa(limit))
+		return fmt.Sprintf("%s://%s%s?%s", scheme, host, path, newParams.Encode())
+	}
+
+	links := models.PaginationLinks{
+		Self: makeURL(page),
+	}
+
+	if page > 1 {
+		prevURL := makeURL(page - 1)
+		links.Prev = &prevURL
+	}
+
+	if page < totalPages {
+		nextURL := makeURL(page + 1)
+		links.Next = &nextURL
+	}
+
+	return links
+}
+
+func (ctrl *ProductController) buildProductResponse(c *gin.Context, message string, data interface{}, page, limit, totalItems int) models.HATEOASResponse {
+	totalPages := 0
+	if totalItems > 0 {
+		totalPages = (totalItems + limit - 1) / limit
+	}
+
+	if page > totalPages && totalPages > 0 {
+		page = totalPages
+	}
+	if page < 1 {
+		page = 1
+	}
+
+	meta := models.PaginationMeta{
+		Page:       page,
+		Limit:      limit,
+		TotalItems: totalItems,
+		TotalPages: totalPages,
+	}
+
+	links := ctrl.generateProductLinks(c, page, limit, totalPages)
+
+	return models.HATEOASResponse{
+		Success: true,
+		Message: message,
+		Data:    data,
+		Meta:    meta,
+		Links:   links,
+	}
+}
+
 // @Summary Get all categories
 // @Description Get list of all categories
 // @Tags Categories
@@ -24,7 +115,12 @@ type ProductController struct{}
 // @Success 200 {object} models.Response
 // @Router /categories [get]
 func (ctrl *ProductController) GetAllCategories(c *gin.Context) {
-	rows, _ := models.DB.Query(context.Background(), "SELECT id, name, is_active, created_at FROM categories ORDER BY name")
+	rows, err := models.DB.Query(context.Background(), "SELECT id, name, is_active, created_at FROM categories ORDER BY name")
+	if err != nil {
+		log.Printf("Error querying categories: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Failed to retrieve categories"})
+		return
+	}
 	defer rows.Close()
 
 	categories := []gin.H{}
@@ -33,7 +129,10 @@ func (ctrl *ProductController) GetAllCategories(c *gin.Context) {
 		var name string
 		var isActive bool
 		var createdAt time.Time
-		rows.Scan(&id, &name, &isActive, &createdAt)
+		if err := rows.Scan(&id, &name, &isActive, &createdAt); err != nil {
+			log.Printf("Error scanning category row: %v", err)
+			continue
+		}
 		categories = append(categories, gin.H{"id": id, "name": name, "is_active": isActive, "created_at": createdAt})
 	}
 
@@ -61,43 +160,54 @@ func invalidateProductCache() {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(10)
-// @Success 200 {object} models.PaginationResponse
+// @Success 200 {object} models.HATEOASResponse
 // @Router /products [get]
 func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
+	page, limit, offset := ctrl.getPaginationParams(c, 10)
 
 	cacheKey := getProductCacheKey(page, limit)
 	ctx := context.Background()
 
 	if models.RedisClient != nil {
 		cached, err := models.RedisClient.Get(ctx, cacheKey).Result()
-		if err == nil {
+		if err == nil && cached != "" {
+			log.Println("Serving products from cache")
 			c.Data(200, "application/json", []byte(cached))
 			return
 		}
+		log.Printf("Cache miss or error: %v", err)
 	}
 
-	offset := (page - 1) * limit
-
 	var total int
-	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM products WHERE is_active=true").Scan(&total)
+	err := models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM products WHERE is_active=true").Scan(&total)
+	if err != nil {
+		log.Printf("Error counting products: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Failed to count products"})
+		return
+	}
 
-	rows, _ := models.DB.Query(context.Background(),
+	log.Printf("Total products: %d, Page: %d, Limit: %d, Offset: %d", total, page, limit, offset)
+
+	rows, err := models.DB.Query(context.Background(),
 		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true ORDER BY created_at DESC LIMIT $1 OFFSET $2",
 		limit, offset)
+
+	if err != nil {
+		log.Printf("Error querying products: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to retrieve products: %v", err)})
+		return
+	}
 	defer rows.Close()
 
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			log.Printf("Error scanning product row: %v", err)
+			continue
+		}
+
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
 			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
@@ -107,24 +217,26 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 		})
 	}
 
-	response := gin.H{
-		"success": true, "message": "Products retrieved", "data": products,
-		"meta": gin.H{
-			"page": page, "limit": limit, "total_items": total,
-			"total_pages": int(math.Ceil(float64(total) / float64(limit))),
-		},
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating rows: %v", err)
 	}
+
+	log.Printf("Retrieved %d products out of %d total", len(products), total)
+
+	response := ctrl.buildProductResponse(c, "Products retrieved successfully", products, page, limit, total)
 
 	if models.RedisClient != nil {
 		jsonData, _ := json.Marshal(response)
-		models.RedisClient.Set(ctx, cacheKey, string(jsonData), 5*time.Minute)
+		if err := models.RedisClient.Set(ctx, cacheKey, string(jsonData), 5*time.Minute).Err(); err != nil {
+			log.Printf("Failed to cache products: %v", err)
+		}
 	}
 
 	c.JSON(200, response)
 }
 
 // @Summary Filter products
-// @Description Filter products by search, category, sort, and price range
+// @Description Filter products by search, category, sort, and price range with HATEOAS links
 // @Tags Products
 // @Produce json
 // @Param search query string false "Search by product name"
@@ -134,9 +246,13 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 // @Param sort query string false "Filter by type"
 // @Param min_price query number false "Minimum price"
 // @Param max_price query number false "Maximum price"
-// @Success 200 {object} models.Response
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Items per page" default(10)
+// @Success 200 {object} models.HATEOASResponse
 // @Router /products/filter [get]
 func (ctrl *ProductController) FilterProducts(c *gin.Context) {
+	page, limit, offset := ctrl.getPaginationParams(c, 10)
+
 	search := strings.TrimSpace(c.Query("search"))
 	category := strings.TrimSpace(c.Query("category"))
 	sortBy := strings.TrimSpace(c.Query("sort"))
@@ -146,11 +262,14 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 	maxPrice, _ := strconv.Atoi(c.Query("max_price"))
 
 	query := "SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true"
+	countQuery := "SELECT COUNT(*) FROM products WHERE is_active=true"
 	args := []interface{}{}
 	paramIndex := 1
 
 	if search != "" {
-		query += fmt.Sprintf(" AND LOWER(name) LIKE LOWER($%d)", paramIndex)
+		condition := fmt.Sprintf(" AND LOWER(name) LIKE LOWER($%d)", paramIndex)
+		query += condition
+		countQuery += condition
 		args = append(args, "%"+search+"%")
 		paramIndex++
 	}
@@ -158,29 +277,38 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 	if category != "" {
 		if category == "favorite" {
 			query += " AND is_favorite=true"
+			countQuery += " AND is_favorite=true"
 		} else {
-			query += fmt.Sprintf(" AND category_id IN (SELECT id FROM categories WHERE LOWER(name)=LOWER($%d))", paramIndex)
+			condition := fmt.Sprintf(" AND category_id IN (SELECT id FROM categories WHERE LOWER(name)=LOWER($%d))", paramIndex)
+			query += condition
+			countQuery += condition
 			args = append(args, category)
 			paramIndex++
 		}
 	}
 
 	if minPrice > 0 {
-		query += fmt.Sprintf(" AND price >= $%d", paramIndex)
+		condition := fmt.Sprintf(" AND price >= $%d", paramIndex)
+		query += condition
+		countQuery += condition
 		args = append(args, minPrice)
 		paramIndex++
 	}
 
 	if maxPrice > 0 {
-		query += fmt.Sprintf(" AND price <= $%d", paramIndex)
+		condition := fmt.Sprintf(" AND price <= $%d", paramIndex)
+		query += condition
+		countQuery += condition
 		args = append(args, maxPrice)
 		paramIndex++
 	}
 
 	if sortBy == "buy1get1" {
 		query += " AND is_buy1get1=true"
+		countQuery += " AND is_buy1get1=true"
 	} else if sortBy == "flash_sale" {
 		query += " AND is_flash_sale=true"
+		countQuery += " AND is_flash_sale=true"
 	}
 
 	orderBy := ""
@@ -200,15 +328,34 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 		orderBy = " ORDER BY created_at DESC"
 	}
 
-	query += orderBy
+	var total int
+	err := models.DB.QueryRow(context.Background(), countQuery, args...).Scan(&total)
+	if err != nil {
+		log.Printf("Error counting filtered products: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Failed to count products"})
+		return
+	}
 
-	rows, _ := models.DB.Query(context.Background(), query, args...)
+	query += orderBy
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", paramIndex, paramIndex+1)
+	args = append(args, limit, offset)
+
+	rows, err := models.DB.Query(context.Background(), query, args...)
+	if err != nil {
+		log.Printf("Error filtering products: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to filter products: %v", err)})
+		return
+	}
 	defer rows.Close()
 
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			log.Printf("Error scanning filtered product: %v", err)
+			continue
+		}
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
 			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
@@ -218,12 +365,12 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 		})
 	}
 
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "Products filtered",
-		"data":    products,
-		"total":   len(products),
-	})
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating filtered rows: %v", err)
+	}
+
+	response := ctrl.buildProductResponse(c, "Products filtered successfully", products, page, limit, total)
+	c.JSON(200, response)
 }
 
 // @Summary Get favorite products
@@ -233,14 +380,24 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 // @Success 200 {object} models.Response
 // @Router /products/favorite [get]
 func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
-	rows, _ := models.DB.Query(context.Background(),
+	rows, err := models.DB.Query(context.Background(),
 		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true AND is_favorite=true ORDER BY created_at DESC LIMIT 4")
+
+	if err != nil {
+		log.Printf("Error querying favorite products: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to retrieve favorite products: %v", err)})
+		return
+	}
 	defer rows.Close()
 
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			log.Printf("Error scanning favorite product: %v", err)
+			continue
+		}
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
 			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
@@ -248,6 +405,10 @@ func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
 			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
 			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		})
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating favorite rows: %v", err)
 	}
 
 	c.JSON(200, gin.H{"success": true, "message": "Favorite products retrieved", "data": products})
@@ -266,10 +427,11 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 
 	var p models.Product
 	err := models.DB.QueryRow(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE id=$1",
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE id=$1 AND is_active=true",
 		id).Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 
 	if err != nil {
+		log.Printf("Error getting product by ID: %v", err)
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
 		return
 	}
@@ -284,10 +446,10 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param name formData string true "Product name"
-// @Param description formData string false "Product description"
+// @Param description formData string true "Product description"
 // @Param category_id formData int true "Category ID"
 // @Param price formData int true "Product price"
-// @Param stock formData int true "Product stock"
+// @Param stock formData int false "Product stock"
 // @Param is_flash_sale formData bool false "Is flash sale"
 // @Param is_favorite formData bool false "Is favorite"
 // @Param is_buy1get1 formData bool false "Is buy 1 get 1"
@@ -295,17 +457,19 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 // @Success 201 {object} models.Response
 // @Router /admin/products [post]
 func (ctrl *ProductController) CreateProduct(c *gin.Context) {
+	ctx := context.Background()
+
 	name := strings.TrimSpace(c.PostForm("name"))
 	description := strings.TrimSpace(c.PostForm("description"))
 	categoryIDStr := c.PostForm("category_id")
 	priceStr := c.PostForm("price")
-	stockStr := c.PostForm("stock")
+	stockStr := c.DefaultPostForm("stock", "0")
 	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("is_flash_sale", "false"))
 	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("is_favorite", "false"))
 	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", "false"))
 
-	if name == "" || categoryIDStr == "" || priceStr == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Name, category_id, and price are required"})
+	if name == "" || description == "" || categoryIDStr == "" || priceStr == "" {
+		c.JSON(400, gin.H{"success": false, "message": "Name, description, category_id, and price are required"})
 		return
 	}
 
@@ -341,7 +505,12 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	}
 
 	var categoryExists int
-	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM categories WHERE id=$1", categoryID).Scan(&categoryExists)
+	err = models.DB.QueryRow(ctx, "SELECT COUNT(*) FROM categories WHERE id=$1", categoryID).Scan(&categoryExists)
+	if err != nil {
+		log.Printf("Error checking category: %v", err)
+		c.JSON(500, gin.H{"success": false, "message": "Failed to validate category"})
+		return
+	}
 	if categoryExists == 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Category not found"})
 		return
@@ -363,39 +532,79 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		}
 
 		uploadDir := "./uploads/products"
-		os.MkdirAll(uploadDir, os.ModePerm)
+		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+			log.Printf("Error creating upload directory: %v", err)
+			c.JSON(500, gin.H{"success": false, "message": "Failed to create upload directory"})
+			return
+		}
 
 		filename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 		savePath := filepath.Join(uploadDir, filename)
 
 		if err := c.SaveUploadedFile(file, savePath); err != nil {
+			log.Printf("Error saving file: %v", err)
 			c.JSON(500, gin.H{"success": false, "message": "Failed to save image: " + err.Error()})
 			return
 		}
 		imageURL = "/uploads/products/" + filename
+		log.Printf("Image saved successfully: %s", imageURL)
+	} else {
+		log.Printf("No image uploaded or error: %v", err)
 	}
 
 	now := time.Now()
+	insertQuery := `
+		INSERT INTO products 
+		(name, description, category_id, price, stock, image_url, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11) 
+		RETURNING id
+	`
+
 	var id int
-	err = models.DB.QueryRow(context.Background(),
-		"INSERT INTO products (name, description, category_id, price, stock, image_url, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10,$11) RETURNING id",
-		name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, now, now).Scan(&id)
+	err = models.DB.QueryRow(ctx, insertQuery,
+		name, description, categoryID, price, stock, imageURL,
+		isFlashSale, isFavorite, isBuy1Get1, now, now).Scan(&id)
 
 	if err != nil {
+		log.Printf("Error inserting product to database: %v", err)
+		log.Printf("Query params: name=%s, description=%s, category_id=%d, price=%d, stock=%d, image_url=%s",
+			name, description, categoryID, price, stock, imageURL)
+
+		if imageURL != "" {
+			os.Remove("." + imageURL)
+		}
+
 		c.JSON(500, gin.H{"success": false, "message": "Failed to create product: " + err.Error()})
 		return
 	}
 
+	log.Printf("Product created successfully with ID: %d", id)
+
 	invalidateProductCache()
 
+	var verifyID int
+	err = models.DB.QueryRow(ctx, "SELECT id FROM products WHERE id=$1", id).Scan(&verifyID)
+	if err != nil {
+		log.Printf("WARNING: Product created but verification failed: %v", err)
+	} else {
+		log.Printf("Product verified in database: ID=%d", verifyID)
+	}
+
 	c.JSON(201, gin.H{
-		"success": true, "message": "Product created successfully",
+		"success": true,
+		"message": "Product created successfully",
 		"data": gin.H{
-			"id": id, "name": name, "description": description,
-			"category_id": categoryID, "price": price, "stock": stock,
-			"image_url": imageURL, "is_flash_sale": isFlashSale,
-			"is_favorite": isFavorite, "is_buy1get1": isBuy1Get1,
-			"is_active": true,
+			"id":            id,
+			"name":          name,
+			"description":   description,
+			"category_id":   categoryID,
+			"price":         price,
+			"stock":         stock,
+			"image_url":     imageURL,
+			"is_flash_sale": isFlashSale,
+			"is_favorite":   isFavorite,
+			"is_buy1get1":   isBuy1Get1,
+			"is_active":     true,
 		},
 	})
 }
@@ -430,6 +639,7 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
 
 	if err != nil {
+		log.Printf("Error finding product: %v", err)
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
 		return
 	}
@@ -504,6 +714,7 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
 
 	if err != nil {
+		log.Printf("Error updating product: %v", err)
 		c.JSON(500, gin.H{"success": false, "message": "Failed to update product"})
 		return
 	}
@@ -534,12 +745,14 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 		"SELECT COALESCE(image_url, '') FROM products WHERE id=$1", id).Scan(&imageURL)
 
 	if err != nil {
+		log.Printf("Error finding product to delete: %v", err)
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
 		return
 	}
 
 	_, err = models.DB.Exec(context.Background(), "DELETE FROM products WHERE id=$1", id)
 	if err != nil {
+		log.Printf("Error deleting product: %v", err)
 		c.JSON(500, gin.H{"success": false, "message": "Failed to delete product"})
 		return
 	}
