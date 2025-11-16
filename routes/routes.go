@@ -75,7 +75,6 @@ func SetupRoutes(router *gin.Engine) {
 	admin := router.Group("/admin")
 	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
 	{
-		admin.GET("/dashboard", orderCtrl.GetDashboard)
 
 		admin.GET("/profile", authCtrl.GetAdminProfile)
 		admin.PATCH("/profile", authCtrl.UpdateAdminProfile)
