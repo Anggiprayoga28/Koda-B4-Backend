@@ -129,31 +129,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/dashboard": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get dashboard statistics (Admin)",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin - Dashboard"
-                ],
-                "summary": "Get dashboard stats",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/admin/orders": {
             "get": {
                 "security": [
@@ -189,7 +164,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.PaginationResponse"
+                            "$ref": "#/definitions/models.HATEOASResponse"
                         }
                     }
                 }
@@ -309,7 +284,8 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Product description",
                         "name": "description",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "integer",
@@ -329,8 +305,7 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Product stock",
                         "name": "stock",
-                        "in": "formData",
-                        "required": true
+                        "in": "formData"
                     },
                     {
                         "type": "boolean",
@@ -598,7 +573,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get paginated users (Admin)",
+                "description": "Get users",
                 "produces": [
                     "application/json"
                 ],
@@ -626,7 +601,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.PaginationResponse"
+                            "$ref": "#/definitions/models.HATEOASResponse"
                         }
                     }
                 }
@@ -1436,7 +1411,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.PaginationResponse"
+                            "$ref": "#/definitions/models.HATEOASResponse"
                         }
                     }
                 }
@@ -1464,7 +1439,7 @@ const docTemplate = `{
         },
         "/products/filter": {
             "get": {
-                "description": "Filter products by search, category, sort, and price range",
+                "description": "Filter products by search, category, sort, and price range with HATEOAS links",
                 "produces": [
                     "application/json"
                 ],
@@ -1526,13 +1501,27 @@ const docTemplate = `{
                         "description": "Maximum price",
                         "name": "max_price",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Response"
+                            "$ref": "#/definitions/models.HATEOASResponse"
                         }
                     }
                 }
@@ -1678,7 +1667,56 @@ const docTemplate = `{
                 }
             }
         },
+        "models.HATEOASResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "links": {
+                    "$ref": "#/definitions/models.PaginationLinks"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/models.PaginationMeta"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "models.MetaData": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total_items": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.PaginationLinks": {
+            "type": "object",
+            "properties": {
+                "next": {
+                    "type": "string"
+                },
+                "prev": {
+                    "type": "string"
+                },
+                "self": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PaginationMeta": {
             "type": "object",
             "properties": {
                 "limit": {

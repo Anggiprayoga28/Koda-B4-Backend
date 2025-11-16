@@ -9,7 +9,39 @@ definitions:
       success:
         type: boolean
     type: object
+  models.HATEOASResponse:
+    properties:
+      data: {}
+      links:
+        $ref: '#/definitions/models.PaginationLinks'
+      message:
+        type: string
+      meta:
+        $ref: '#/definitions/models.PaginationMeta'
+      success:
+        type: boolean
+    type: object
   models.MetaData:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  models.PaginationLinks:
+    properties:
+      next:
+        type: string
+      prev:
+        type: string
+      self:
+        type: string
+    type: object
+  models.PaginationMeta:
     properties:
       limit:
         type: integer
@@ -117,21 +149,6 @@ paths:
       summary: Update category
       tags:
       - categories
-  /admin/dashboard:
-    get:
-      description: Get dashboard statistics (Admin)
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Get dashboard stats
-      tags:
-      - Admin - Dashboard
   /admin/orders:
     get:
       description: Get paginated orders (Admin)
@@ -152,7 +169,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.PaginationResponse'
+            $ref: '#/definitions/models.HATEOASResponse'
       security:
       - BearerAuth: []
       summary: Get all orders
@@ -225,6 +242,7 @@ paths:
       - description: Product description
         in: formData
         name: description
+        required: true
         type: string
       - description: Category ID
         in: formData
@@ -239,7 +257,6 @@ paths:
       - description: Product stock
         in: formData
         name: stock
-        required: true
         type: integer
       - description: Is flash sale
         in: formData
@@ -414,7 +431,7 @@ paths:
       - Admin - Profile
   /admin/users:
     get:
-      description: Get paginated users (Admin)
+      description: Get users
       parameters:
       - default: 1
         description: Page
@@ -432,7 +449,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.PaginationResponse'
+            $ref: '#/definitions/models.HATEOASResponse'
       security:
       - BearerAuth: []
       summary: Get all users
@@ -958,7 +975,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.PaginationResponse'
+            $ref: '#/definitions/models.HATEOASResponse'
       summary: Get all products
       tags:
       - Products
@@ -1020,7 +1037,8 @@ paths:
       - Products
   /products/filter:
     get:
-      description: Filter products by search, category, sort, and price range
+      description: Filter products by search, category, sort, and price range with
+        HATEOAS links
       parameters:
       - description: Search by product name
         in: query
@@ -1059,13 +1077,23 @@ paths:
         in: query
         name: max_price
         type: number
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Response'
+            $ref: '#/definitions/models.HATEOASResponse'
       summary: Filter products
       tags:
       - Products
