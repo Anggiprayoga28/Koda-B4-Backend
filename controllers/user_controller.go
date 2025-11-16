@@ -3,7 +3,8 @@ package controllers
 import (
 	"coffee-shop/models"
 	"context"
-	"math"
+	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,25 +15,107 @@ import (
 
 type UserController struct{}
 
+func (ctrl *UserController) getPaginationParams(c *gin.Context, defaultLimit int) (page, limit, offset int) {
+	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ = strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(defaultLimit)))
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = defaultLimit
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset = (page - 1) * limit
+	return page, limit, offset
+}
+
+func (ctrl *UserController) generateLinks(c *gin.Context, page, limit, totalPages int) models.PaginationLinks {
+	scheme := "https"
+	if c.Request.TLS == nil {
+		scheme = "http"
+	}
+
+	host := c.Request.Host
+	path := c.Request.URL.Path
+	queryParams := c.Request.URL.Query()
+
+	makeURL := func(pageNum int) string {
+		newParams := url.Values{}
+		for key, values := range queryParams {
+			if key != "page" {
+				for _, value := range values {
+					newParams.Add(key, value)
+				}
+			}
+		}
+		newParams.Set("page", strconv.Itoa(pageNum))
+		newParams.Set("limit", strconv.Itoa(limit))
+		return fmt.Sprintf("%s://%s%s?%s", scheme, host, path, newParams.Encode())
+	}
+
+	links := models.PaginationLinks{
+		Self: makeURL(page),
+	}
+
+	if page > 1 {
+		prevURL := makeURL(page - 1)
+		links.Prev = &prevURL
+	}
+
+	if page < totalPages {
+		nextURL := makeURL(page + 1)
+		links.Next = &nextURL
+	}
+
+	return links
+}
+
+func (ctrl *UserController) buildResponse(c *gin.Context, message string, data interface{}, page, limit, totalItems int) models.HATEOASResponse {
+	totalPages := 0
+	if totalItems > 0 {
+		totalPages = (totalItems + limit - 1) / limit
+	}
+
+	if page > totalPages && totalPages > 0 {
+		page = totalPages
+	}
+	if page < 1 {
+		page = 1
+	}
+
+	meta := models.PaginationMeta{
+		Page:       page,
+		Limit:      limit,
+		TotalItems: totalItems,
+		TotalPages: totalPages,
+	}
+
+	links := ctrl.generateLinks(c, page, limit, totalPages)
+
+	return models.HATEOASResponse{
+		Success: true,
+		Message: message,
+		Data:    data,
+		Meta:    meta,
+		Links:   links,
+	}
+}
+
 // @Summary Get all users
-// @Description Get paginated users (Admin)
+// @Description Get users
 // @Tags Admin - Users
 // @Security BearerAuth
 // @Produce json
 // @Param page query int false "Page" default(1)
 // @Param limit query int false "Limit" default(10)
-// @Success 200 {object} models.PaginationResponse
+// @Success 200 {object} models.HATEOASResponse
 // @Router /admin/users [get]
 func (ctrl *UserController) GetAllUsers(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
-	offset := (page - 1) * limit
+	page, limit, offset := ctrl.getPaginationParams(c, 10)
 
 	var total int
 	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users").Scan(&total)
@@ -56,10 +139,8 @@ func (ctrl *UserController) GetAllUsers(c *gin.Context) {
 		})
 	}
 
-	c.JSON(200, gin.H{
-		"success": true, "message": "Users retrieved", "data": users,
-		"meta": gin.H{"page": page, "limit": limit, "total_items": total, "total_pages": int(math.Ceil(float64(total) / float64(limit)))},
-	})
+	response := ctrl.buildResponse(c, "Users retrieved successfully", users, page, limit, total)
+	c.JSON(200, response)
 }
 
 // @Summary Get user by ID
