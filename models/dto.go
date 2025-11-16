@@ -132,3 +132,24 @@ type TransactionResponse struct {
 	Address        string `json:"address"`
 	DeliveryMethod string `json:"delivery_method"`
 }
+
+type PaginationLinks struct {
+	Self string  `json:"self"`
+	Prev *string `json:"prev,omitempty"`
+	Next *string `json:"next,omitempty"`
+}
+
+type PaginationMeta struct {
+	Page       int `json:"page"`
+	Limit      int `json:"limit"`
+	TotalItems int `json:"total_items"`
+	TotalPages int `json:"total_pages"`
+}
+
+type HATEOASResponse struct {
+	Success bool            `json:"success"`
+	Message string          `json:"message"`
+	Data    interface{}     `json:"data"`
+	Meta    PaginationMeta  `json:"meta"`
+	Links   PaginationLinks `json:"links"`
+}
