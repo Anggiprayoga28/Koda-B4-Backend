@@ -4,7 +4,7 @@ import (
 	"coffee-shop/models"
 	"context"
 	"fmt"
-	"math"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -13,6 +13,96 @@ import (
 
 type OrderController struct{}
 
+func (ctrl *OrderController) getPaginationParams(c *gin.Context, defaultLimit int) (page, limit, offset int) {
+	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ = strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(defaultLimit)))
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = defaultLimit
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset = (page - 1) * limit
+	return page, limit, offset
+}
+
+func (ctrl *OrderController) generateLinks(c *gin.Context, page, limit, totalPages int) models.PaginationLinks {
+	scheme := "https"
+	if c.Request.TLS == nil {
+		scheme = "http"
+	}
+
+	host := c.Request.Host
+	path := c.Request.URL.Path
+	queryParams := c.Request.URL.Query()
+
+	makeURL := func(pageNum int) string {
+		newParams := url.Values{}
+		for key, values := range queryParams {
+			if key != "page" {
+				for _, value := range values {
+					newParams.Add(key, value)
+				}
+			}
+		}
+		newParams.Set("page", strconv.Itoa(pageNum))
+		newParams.Set("limit", strconv.Itoa(limit))
+		return fmt.Sprintf("%s://%s%s?%s", scheme, host, path, newParams.Encode())
+	}
+
+	links := models.PaginationLinks{
+		Self: makeURL(page),
+	}
+
+	if page > 1 {
+		prevURL := makeURL(page - 1)
+		links.Prev = &prevURL
+	}
+
+	if page < totalPages {
+		nextURL := makeURL(page + 1)
+		links.Next = &nextURL
+	}
+
+	return links
+}
+
+func (ctrl *OrderController) buildResponse(c *gin.Context, message string, data interface{}, page, limit, totalItems int) models.HATEOASResponse {
+	totalPages := 0
+	if totalItems > 0 {
+		totalPages = (totalItems + limit - 1) / limit
+	}
+
+	if page > totalPages && totalPages > 0 {
+		page = totalPages
+	}
+	if page < 1 {
+		page = 1
+	}
+
+	meta := models.PaginationMeta{
+		Page:       page,
+		Limit:      limit,
+		TotalItems: totalItems,
+		TotalPages: totalPages,
+	}
+
+	links := ctrl.generateLinks(c, page, limit, totalPages)
+
+	return models.HATEOASResponse{
+		Success: true,
+		Message: message,
+		Data:    data,
+		Meta:    meta,
+		Links:   links,
+	}
+}
+
 // @Summary Get all orders
 // @Description Get paginated orders (Admin)
 // @Tags Admin - Orders
@@ -20,18 +110,10 @@ type OrderController struct{}
 // @Produce json
 // @Param page query int false "Page" default(1)
 // @Param limit query int false "Limit" default(10)
-// @Success 200 {object} models.PaginationResponse
+// @Success 200 {object} models.HATEOASResponse
 // @Router /admin/orders [get]
 func (ctrl *OrderController) GetAllOrders(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
-	offset := (page - 1) * limit
+	page, limit, offset := ctrl.getPaginationParams(c, 10)
 
 	var total int
 	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders").Scan(&total)
@@ -51,10 +133,8 @@ func (ctrl *OrderController) GetAllOrders(c *gin.Context) {
 		})
 	}
 
-	c.JSON(200, gin.H{
-		"success": true, "message": "Orders retrieved", "data": orders,
-		"meta": gin.H{"page": page, "limit": limit, "total_items": total, "total_pages": int(math.Ceil(float64(total) / float64(limit)))},
-	})
+	response := ctrl.buildResponse(c, "Orders retrieved successfully", orders, page, limit, total)
+	c.JSON(200, response)
 }
 
 // @Summary Get order by ID
@@ -205,26 +285,4 @@ func (ctrl *OrderController) UpdateOrderStatus(c *gin.Context) {
 
 	models.DB.Exec(context.Background(), "UPDATE orders SET status=$1, updated_at=$2 WHERE id=$3", status, time.Now(), id)
 	c.JSON(200, gin.H{"success": true, "message": "Status updated"})
-}
-
-// @Summary Get dashboard stats
-// @Description Get dashboard statistics (Admin)
-// @Tags Admin - Dashboard
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} models.Response
-// @Router /admin/dashboard [get]
-func (ctrl *OrderController) GetDashboard(c *gin.Context) {
-	var total, pending, shipping, completed, revenue int
-	models.DB.QueryRow(context.Background(),
-		"SELECT COUNT(*), COUNT(CASE WHEN status='pending' THEN 1 END), COUNT(CASE WHEN status='shipping' THEN 1 END), COUNT(CASE WHEN status='done' THEN 1 END), COALESCE(SUM(total),0) FROM orders").Scan(
-		&total, &pending, &shipping, &completed, &revenue)
-
-	c.JSON(200, gin.H{
-		"success": true, "message": "Dashboard retrieved",
-		"data": gin.H{
-			"total_orders": total, "pending_orders": pending,
-			"shipping_orders": shipping, "completed_orders": completed, "total_revenue": revenue,
-		},
-	})
 }
