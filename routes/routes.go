@@ -12,6 +12,7 @@ import (
 
 func SetupRoutes(router *gin.Engine) {
 	authCtrl := &controllers.AuthController{}
+	profileCtrl := &controllers.ProfileController{}
 	userCtrl := &controllers.UserController{}
 	productCtrl := &controllers.ProductController{}
 	orderCtrl := &controllers.OrderController{}
@@ -26,7 +27,6 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.POST("/auth/register", authCtrl.Register)
 	router.POST("/auth/login", authCtrl.Login)
-
 	router.POST("/auth/forgot-password", authCtrl.ForgotPassword)
 	router.POST("/auth/verify-otp", authCtrl.VerifyOTP)
 
@@ -39,11 +39,11 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/products/:id", productCtrl.GetProductByID)
 	router.GET("/products/:id/detail", productDetailCtrl.GetProductDetail)
 
-	authProtected := router.Group("/auth")
-	authProtected.Use(middleware.AuthMiddleware())
+	profileRoutes := router.Group("/profile")
+	profileRoutes.Use(middleware.AuthMiddleware())
 	{
-		authProtected.GET("/profile", authCtrl.GetProfile)
-		authProtected.PATCH("/profile", authCtrl.UpdateProfile)
+		profileRoutes.GET("", profileCtrl.GetProfile)
+		profileRoutes.PATCH("", profileCtrl.UpdateProfile)
 	}
 
 	cartRoutes := router.Group("/cart")
@@ -75,12 +75,8 @@ func SetupRoutes(router *gin.Engine) {
 	admin := router.Group("/admin")
 	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
 	{
-
-		admin.GET("/profile", authCtrl.GetAdminProfile)
-		admin.PATCH("/profile", authCtrl.UpdateAdminProfile)
-
-		admin.GET("/profiles", userCtrl.GetAllUsers)
-		admin.GET("/profiles/:id", userCtrl.GetUserByID)
+		admin.GET("/profile", profileCtrl.GetProfile)
+		admin.PATCH("/profile", profileCtrl.UpdateProfile)
 
 		admin.GET("/users", userCtrl.GetAllUsers)
 		admin.GET("/users/:id", userCtrl.GetUserByID)
