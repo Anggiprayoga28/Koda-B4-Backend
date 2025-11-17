@@ -490,12 +490,10 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 
 	var imageURL, cloudinaryID string
 
-	// Handle image upload with Cloudinary
 	file, fileHeader, err := c.Request.FormFile("image")
 	if err == nil {
 		defer file.Close()
 
-		// Initialize Cloudinary service
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err != nil {
 			log.Printf("Error initializing Cloudinary: %v", err)
@@ -503,13 +501,11 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 			return
 		}
 
-		// Validate image file
 		if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
 			c.JSON(400, gin.H{"success": false, "message": err.Error()})
 			return
 		}
 
-		// Upload to Cloudinary
 		imageURL, cloudinaryID, err = cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
 		if err != nil {
 			log.Printf("Error uploading to Cloudinary: %v", err)
@@ -538,7 +534,6 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	if err != nil {
 		log.Printf("Error inserting product to database: %v", err)
 
-		// Rollback: delete uploaded image from Cloudinary if database insert fails
 		if cloudinaryID != "" {
 			cloudinaryService, _ := models.NewCloudinaryService()
 			if cloudinaryService != nil {
@@ -648,12 +643,10 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	imageURL := existingProduct.ImageURL
 	cloudinaryID := existingProduct.CloudinaryID
 
-	// Handle new image upload
 	file, fileHeader, err := c.Request.FormFile("image")
 	if err == nil {
 		defer file.Close()
 
-		// Initialize Cloudinary service
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err != nil {
 			log.Printf("Error initializing Cloudinary: %v", err)
@@ -661,13 +654,11 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 			return
 		}
 
-		// Validate image file
 		if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
 			c.JSON(400, gin.H{"success": false, "message": err.Error()})
 			return
 		}
 
-		// Upload new image to Cloudinary
 		newImageURL, newCloudinaryID, err := cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
 		if err != nil {
 			log.Printf("Error uploading to Cloudinary: %v", err)
@@ -675,7 +666,6 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 			return
 		}
 
-		// Delete old image from Cloudinary if exists
 		if existingProduct.CloudinaryID != "" {
 			if err := cloudinaryService.DeleteImage(ctx, existingProduct.CloudinaryID); err != nil {
 				log.Printf("Warning: Failed to delete old image from Cloudinary: %v", err)
@@ -729,7 +719,6 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	// Delete from database first
 	_, err = models.DB.Exec(ctx, "DELETE FROM products WHERE id=$1", id)
 	if err != nil {
 		log.Printf("Error deleting product: %v", err)
@@ -737,7 +726,6 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	// Delete image from Cloudinary if exists
 	if cloudinaryID != "" {
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err == nil {
