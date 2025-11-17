@@ -25,7 +25,10 @@ func (ctrl *OrderDetailController) GetOrderDetail(c *gin.Context) {
 	orderID, _ := strconv.Atoi(c.Param("id"))
 
 	if orderID <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid order ID"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid order ID",
+		})
 		return
 	}
 
@@ -62,7 +65,10 @@ func (ctrl *OrderDetailController) GetOrderDetail(c *gin.Context) {
 		&statusName, &statusDisplay, &phone, &fullName)
 
 	if err != nil {
-		c.JSON(404, gin.H{"success": false, "message": "Order not found"})
+		c.JSON(404, gin.H{
+			"success": false,
+			"message": "Order not found",
+		})
 		return
 	}
 
@@ -71,8 +77,8 @@ func (ctrl *OrderDetailController) GetOrderDetail(c *gin.Context) {
 			oi.product_id,
 			p.name,
 			oi.quantity,
-			COALESCE(ps.name, '') as size_name,
-			COALESCE(pt.name, '') as temperature_name,
+			COALESCE(ps.name,'') as size_name,
+			COALESCE(pt.name,'') as temperature_name,
 			oi.unit_price,
 			COALESCE(p.image_url, '') as image_url,
 			COALESCE(oi.is_flash_sale, false) as is_flash_sale,
@@ -86,7 +92,10 @@ func (ctrl *OrderDetailController) GetOrderDetail(c *gin.Context) {
 		WHERE oi.order_id = $1`, orderID)
 
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Failed to get order items"})
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Failed to get order items",
+		})
 		return
 	}
 	defer rows.Close()
@@ -100,37 +109,37 @@ func (ctrl *OrderDetailController) GetOrderDetail(c *gin.Context) {
 		rows.Scan(&productID, &productName, &quantity, &sizeName, &tempName, &unitPrice, &imageURL, &isFlashSale, &itemDeliveryMethod)
 
 		items = append(items, gin.H{
-			"product_id":      productID,
-			"name":            productName,
-			"quantity":        quantity,
-			"size":            sizeName,
-			"temperature":     tempName,
-			"unit_price":      unitPrice,
-			"total_price":     unitPrice * quantity,
-			"image_url":       imageURL,
-			"is_flash_sale":   isFlashSale,
-			"delivery_method": itemDeliveryMethod,
+			"productId":      productID,
+			"name":           productName,
+			"quantity":       quantity,
+			"size":           sizeName,
+			"temperature":    tempName,
+			"unitPrice":      unitPrice,
+			"totalPrice":     unitPrice * quantity,
+			"imageUrl":       imageURL,
+			"isFlashSale":    isFlashSale,
+			"deliveryMethod": itemDeliveryMethod,
 		})
 	}
 
 	c.JSON(200, gin.H{
 		"success": true,
-		"message": "Order detail retrieved",
+		"message": "Order detail retrieved successfully",
 		"data": gin.H{
-			"order_number":    orderNumber,
-			"order_date":      orderDate.Format("02 January 2006 at 03:04 PM"),
-			"full_name":       fullName,
-			"phone":           phone,
-			"address":         deliveryAddress,
-			"payment_method":  paymentMethod,
-			"delivery_method": deliveryMethod,
-			"status":          statusName,
-			"status_display":  statusDisplay,
-			"subtotal":        subtotal,
-			"delivery_fee":    deliveryFee,
-			"tax_amount":      taxAmount,
-			"total":           total,
-			"items":           items,
+			"orderNumber":    orderNumber,
+			"orderDate":      orderDate.Format("02 January 2006 at 03:04 PM"),
+			"fullName":       fullName,
+			"phone":          phone,
+			"address":        deliveryAddress,
+			"deliveryMethod": deliveryMethod,
+			"paymentMethod":  paymentMethod,
+			"status":         statusName,
+			"statusDisplay":  statusDisplay,
+			"subtotal":       subtotal,
+			"deliveryFee":    deliveryFee,
+			"taxAmount":      taxAmount,
+			"total":          total,
+			"items":          items,
 		},
 	})
 }

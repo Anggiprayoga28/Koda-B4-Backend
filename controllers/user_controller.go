@@ -134,8 +134,8 @@ func (ctrl *UserController) GetAllUsers(c *gin.Context) {
 		var createdAt time.Time
 		rows.Scan(&id, &email, &role, &createdAt, &fullName, &phone, &address, &photoURL)
 		users = append(users, gin.H{
-			"id": id, "email": email, "role": role, "created_at": createdAt,
-			"full_name": fullName, "phone": phone, "address": address, "photo_url": photoURL,
+			"id": id, "email": email, "role": role, "createdAt": createdAt,
+			"fullName": fullName, "phone": phone, "address": address, "photoUrl": photoURL,
 		})
 	}
 
@@ -176,8 +176,8 @@ func (ctrl *UserController) GetUserByID(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"success": true, "message": "User retrieved",
 		"data": gin.H{
-			"id": id, "email": email, "role": role, "created_at": createdAt,
-			"full_name": fullName, "phone": phone, "address": address, "photo_url": photoURL,
+			"id": id, "email": email, "role": role, "createdAt": createdAt,
+			"fullName": fullName, "phone": phone, "address": address, "photoUrl": photoURL,
 		},
 	})
 }
@@ -272,7 +272,7 @@ func (ctrl *UserController) CreateUser(c *gin.Context) {
 
 	c.JSON(201, gin.H{
 		"success": true, "message": "User created",
-		"data": gin.H{"id": userID, "email": email, "role": role, "full_name": fullName},
+		"data": gin.H{"id": userID, "email": email, "role": role, "fullName": fullName},
 	})
 }
 

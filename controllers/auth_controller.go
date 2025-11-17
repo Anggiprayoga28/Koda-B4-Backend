@@ -227,11 +227,11 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 		"data": gin.H{
 			"token": token,
 			"user": gin.H{
-				"id":        userID,
-				"email":     email,
-				"role":      role,
-				"full_name": fullName,
-				"phone":     phone,
+				"id":       userID,
+				"email":    email,
+				"role":     role,
+				"fullName": fullName,
+				"phone":    phone,
 			},
 		},
 	})
@@ -294,13 +294,13 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 		"data": gin.H{
 			"token": token,
 			"user": gin.H{
-				"id":        id,
-				"email":     emailDB,
-				"role":      role,
-				"full_name": fullName,
-				"phone":     phone,
-				"address":   address,
-				"photo_url": photoURL,
+				"id":       id,
+				"email":    emailDB,
+				"role":     role,
+				"fullName": fullName,
+				"phone":    phone,
+				"address":  address,
+				"photoUrl": photoURL,
 			},
 		},
 	})
@@ -374,8 +374,8 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 		"success": true,
 		"message": "OTP sent successfully",
 		"data": gin.H{
-			"otp":        otp,
-			"expires_in": "5 minutes",
+			"otp":       otp,
+			"expiresIn": "5 minutes",
 		},
 	})
 }

@@ -125,11 +125,17 @@ func (ctrl *OrderController) GetAllOrders(c *gin.Context) {
 
 	orders := []gin.H{}
 	for rows.Next() {
-		var o models.Order
-		rows.Scan(&o.ID, &o.OrderNumber, &o.UserID, &o.Status, &o.Total, &o.CreatedAt)
+		var id, userID, total int
+		var orderNumber, status string
+		var createdAt time.Time
+		rows.Scan(&id, &orderNumber, &userID, &status, &total, &createdAt)
 		orders = append(orders, gin.H{
-			"id": o.ID, "order_number": o.OrderNumber, "user_id": o.UserID,
-			"status": o.Status, "total": o.Total, "created_at": o.CreatedAt,
+			"id":          id,
+			"orderNumber": orderNumber,
+			"userId":      userID,
+			"status":      status,
+			"total":       total,
+			"createdAt":   createdAt,
 		})
 	}
 
@@ -150,21 +156,40 @@ func (ctrl *OrderController) GetOrderByID(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	if id <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid order ID"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid order ID",
+		})
 		return
 	}
 
-	var o models.Order
+	var orderID, userID, total int
+	var orderNumber, status string
+	var createdAt time.Time
 	err := models.DB.QueryRow(context.Background(),
 		"SELECT id, order_number, user_id, status, total, created_at FROM orders WHERE id=$1",
-		id).Scan(&o.ID, &o.OrderNumber, &o.UserID, &o.Status, &o.Total, &o.CreatedAt)
+		id).Scan(&orderID, &orderNumber, &userID, &status, &total, &createdAt)
 
 	if err != nil {
-		c.JSON(404, gin.H{"success": false, "message": "Order not found"})
+		c.JSON(404, gin.H{
+			"success": false,
+			"message": "Order not found",
+		})
 		return
 	}
 
-	c.JSON(200, gin.H{"success": true, "message": "Order retrieved", "data": o})
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Order retrieved successfully",
+		"data": gin.H{
+			"id":          orderID,
+			"orderNumber": orderNumber,
+			"userId":      userID,
+			"status":      status,
+			"total":       total,
+			"createdAt":   createdAt,
+		},
+	})
 }
 
 // @Summary Create order
@@ -184,24 +209,36 @@ func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 	quantityStr := c.PostForm("quantity")
 
 	if productIDStr == "" || quantityStr == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Product ID and quantity are required"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Product ID and quantity are required",
+		})
 		return
 	}
 
 	productID, err := strconv.Atoi(productIDStr)
 	if err != nil || productID <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid product ID"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid product ID",
+		})
 		return
 	}
 
 	quantity, err := strconv.Atoi(quantityStr)
 	if err != nil || quantity <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid quantity"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid quantity",
+		})
 		return
 	}
 
 	if quantity > 100 {
-		c.JSON(400, gin.H{"success": false, "message": "Maximum quantity is 100"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Maximum quantity is 100",
+		})
 		return
 	}
 
@@ -212,17 +249,26 @@ func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 		productID).Scan(&price, &stock, &isActive)
 
 	if err != nil {
-		c.JSON(400, gin.H{"success": false, "message": "Product not found"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Product not found",
+		})
 		return
 	}
 
 	if !isActive {
-		c.JSON(400, gin.H{"success": false, "message": "Product is not available"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Product is not available",
+		})
 		return
 	}
 
 	if stock < quantity {
-		c.JSON(400, gin.H{"success": false, "message": "Insufficient stock"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Insufficient stock",
+		})
 		return
 	}
 
@@ -236,8 +282,14 @@ func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 		orderNumber, userID, total, now, now, now).Scan(&orderID)
 
 	c.JSON(201, gin.H{
-		"success": true, "message": "Order created",
-		"data": gin.H{"id": orderID, "order_number": orderNumber, "status": "pending", "total": total},
+		"success": true,
+		"message": "Order created successfully",
+		"data": gin.H{
+			"id":          orderID,
+			"orderNumber": orderNumber,
+			"status":      "pending",
+			"total":       total,
+		},
 	})
 }
 
@@ -255,13 +307,19 @@ func (ctrl *OrderController) UpdateOrderStatus(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	if id <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid order ID"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid order ID",
+		})
 		return
 	}
 
 	status := c.PostForm("status")
 	if status == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Status is required"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Status is required",
+		})
 		return
 	}
 
@@ -272,17 +330,27 @@ func (ctrl *OrderController) UpdateOrderStatus(c *gin.Context) {
 		"cancelled": true,
 	}
 	if !validStatuses[status] {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid status. Must be: pending, shipping, done, or cancelled"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid status. Must be: pending, shipping, done, or cancelled",
+		})
 		return
 	}
 
 	var exists int
 	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders WHERE id=$1", id).Scan(&exists)
 	if exists == 0 {
-		c.JSON(404, gin.H{"success": false, "message": "Order not found"})
+		c.JSON(404, gin.H{
+			"success": false,
+			"message": "Order not found",
+		})
 		return
 	}
 
 	models.DB.Exec(context.Background(), "UPDATE orders SET status=$1, updated_at=$2 WHERE id=$3", status, time.Now(), id)
-	c.JSON(200, gin.H{"success": true, "message": "Status updated"})
+
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Order status updated successfully",
+	})
 }

@@ -158,13 +158,13 @@ func (ctrl *HistoryController) GetHistory(c *gin.Context) {
 		}
 
 		orders = append(orders, gin.H{
-			"id":             id,
-			"invoice":        orderNumber,
-			"date":           orderDate.Format("02 January 2006"),
-			"status":         status,
-			"status_display": statusDisplay,
-			"total":          totalAmount,
-			"image_product":  productImage,
+			"id":            id,
+			"invoice":       orderNumber,
+			"date":          orderDate.Format("02 January 2006"),
+			"status":        status,
+			"statusDisplay": statusDisplay,
+			"total":         totalAmount,
+			"imageProduct":  productImage,
 		})
 	}
 
@@ -173,10 +173,10 @@ func (ctrl *HistoryController) GetHistory(c *gin.Context) {
 		"message": "Order history retrieved",
 		"data":    orders,
 		"meta": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total_items": total,
-			"total_pages": int(math.Ceil(float64(total) / float64(limit))),
+			"page":       page,
+			"limit":      limit,
+			"totalItems": total,
+			"totalPages": int(math.Ceil(float64(total) / float64(limit))),
 		},
 	})
 }

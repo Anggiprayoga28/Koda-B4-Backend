@@ -51,14 +51,14 @@ func (ctrl *ProfileController) GetProfile(c *gin.Context) {
 		"success": true,
 		"message": "Profile retrieved successfully",
 		"data": gin.H{
-			"id":         id,
-			"email":      email,
-			"role":       role,
-			"full_name":  fullName,
-			"phone":      phone,
-			"address":    address,
-			"photo_url":  photoURL,
-			"created_at": createdAt,
+			"id":        id,
+			"email":     email,
+			"role":      role,
+			"fullName":  fullName,
+			"phone":     phone,
+			"address":   address,
+			"photoUrl":  photoURL,
+			"createdAt": createdAt,
 		},
 	})
 }
@@ -202,7 +202,7 @@ func (ctrl *ProfileController) UpdateProfile(c *gin.Context) {
 
 	if photoURL != "" {
 		responseData["data"] = gin.H{
-			"photo_url": photoURL,
+			"photoUrl": photoURL,
 		}
 	}
 

@@ -218,17 +218,17 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 	c.JSON(201, gin.H{
 		"success": true,
 		"message": "Order created successfully",
-		"data": models.TransactionResponse{
-			ID:             orderID,
-			OrderNumber:    orderNum,
-			Status:         "pending",
-			Subtotal:       subtotal,
-			DeliveryFee:    deliveryFee,
-			Total:          total,
-			Email:          req.Email,
-			FullName:       req.FullName,
-			Address:        req.Address,
-			DeliveryMethod: req.DeliveryMethod,
+		"data": gin.H{
+			"id":             orderID,
+			"orderNumber":    orderNum,
+			"status":         "pending",
+			"subtotal":       subtotal,
+			"deliveryFee":    deliveryFee,
+			"total":          total,
+			"email":          req.Email,
+			"fullName":       req.FullName,
+			"address":        req.Address,
+			"deliveryMethod": req.DeliveryMethod,
 		},
 	})
 }

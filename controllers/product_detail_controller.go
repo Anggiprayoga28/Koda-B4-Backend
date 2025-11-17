@@ -54,7 +54,7 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 		var name string
 		var adj int
 		sizeRows.Scan(&sid, &name, &adj)
-		sizes = append(sizes, gin.H{"id": sid, "name": name, "price_adjustment": adj})
+		sizes = append(sizes, gin.H{"id": sid, "name": name, "priceAdjustment": adj})
 	}
 
 	temps := []gin.H{}
@@ -87,7 +87,7 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 		var created interface{}
 		revRows.Scan(&rating, &text, &created, &name)
 		reviews = append(reviews, gin.H{
-			"rating": rating, "text": text, "user": name, "created_at": created,
+			"rating": rating, "text": text, "user": name, "createdAt": created,
 		})
 	}
 
@@ -103,7 +103,7 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 		var rflash bool
 		recRows.Scan(&rid, &rname, &rprice, &rimg, &rflash)
 		recs = append(recs, gin.H{
-			"id": rid, "name": rname, "price": rprice, "image_url": rimg, "is_flash_sale": rflash,
+			"id": rid, "name": rname, "price": rprice, "imageUrl": rimg, "isFlashSale": rflash,
 		})
 	}
 
@@ -115,8 +115,8 @@ func (ctrl *ProductDetailController) GetProductDetail(c *gin.Context) {
 			"images":          images,
 			"sizes":           sizes,
 			"temperatures":    temps,
-			"total_reviews":   totalReviews,
-			"average_rating":  avgRating,
+			"totalReviews":    totalReviews,
+			"averageRating":   avgRating,
 			"reviews":         reviews,
 			"recommendations": recs,
 		},
@@ -234,8 +234,8 @@ func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
 			"success": true,
 			"message": "Cart updated successfully",
 			"data": gin.H{
-				"cart_item_id": existingID,
-				"quantity":     newQty,
+				"cartItemId": existingID,
+				"quantity":   newQty,
 			},
 		})
 		return
@@ -260,8 +260,8 @@ func (ctrl *ProductDetailController) AddToCart(c *gin.Context) {
 		"success": true,
 		"message": "Added to cart successfully",
 		"data": gin.H{
-			"cart_item_id": newCartID,
-			"quantity":     quantity,
+			"cartItemId": newCartID,
+			"quantity":   quantity,
 		},
 	})
 }
@@ -327,20 +327,20 @@ func (ctrl *ProductDetailController) GetCart(c *gin.Context) {
 		subtotal += itemPrice
 
 		items = append(items, gin.H{
-			"id":                id,
-			"product_id":        pid,
-			"name":              pname,
-			"base_price":        basePrice,
-			"quantity":          qty,
-			"size":              sizeName,
-			"size_adjustment":   sizeAdj,
-			"temperature":       tempName,
-			"temperature_price": tempPrice,
-			"variant":           variantName,
-			"variant_price":     variantPrice,
-			"subtotal":          itemPrice,
-			"image_url":         img,
-			"stock":             stock,
+			"id":               id,
+			"productId":        pid,
+			"name":             pname,
+			"basePrice":        basePrice,
+			"quantity":         qty,
+			"size":             sizeName,
+			"sizeAdjustment":   sizeAdj,
+			"temperature":      tempName,
+			"temperaturePrice": tempPrice,
+			"variant":          variantName,
+			"variantPrice":     variantPrice,
+			"subtotal":         itemPrice,
+			"imageUrl":         img,
+			"stock":            stock,
 		})
 	}
 
