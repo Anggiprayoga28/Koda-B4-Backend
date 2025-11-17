@@ -142,39 +142,60 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 	role := c.DefaultPostForm("role", "customer")
 
 	if email == "" || password == "" || fullName == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Email, password, and full_name are required"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Email, password, and full_name are required",
+		})
 		return
 	}
 
 	if !isValidEmail(email) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid email format",
+		})
 		return
 	}
 
 	if !isValidPassword(password) {
-		c.JSON(400, gin.H{"success": false, "message": "Password must be at least 6 characters"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Password must be at least 6 characters",
+		})
 		return
 	}
 
 	if len(fullName) < 3 {
-		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Full name must be at least 3 characters",
+		})
 		return
 	}
 
 	if !isValidPhone(phone) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid phone number",
+		})
 		return
 	}
 
 	if role != "customer" && role != "admin" {
-		c.JSON(400, gin.H{"success": false, "message": "Role must be 'customer' or 'admin'"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Role must be 'customer' or 'admin'",
+		})
 		return
 	}
 
 	var exists int
 	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", email).Scan(&exists)
 	if exists > 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Email already exists"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Email already exists",
+		})
 		return
 	}
 
@@ -187,7 +208,10 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 		email, hash, role, now, now).Scan(&userID)
 
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Registration failed"})
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Registration failed",
+		})
 		return
 	}
 
@@ -229,12 +253,18 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 	password := c.PostForm("password")
 
 	if email == "" || password == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Email and password are required"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Email and password are required",
+		})
 		return
 	}
 
 	if !isValidEmail(email) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid email format",
+		})
 		return
 	}
 
@@ -244,7 +274,10 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 		"SELECT id, email, password, role FROM users WHERE email=$1", email).Scan(&id, &emailDB, &passwordDB, &role)
 
 	if err != nil || !verifyPassword(passwordDB, password) {
-		c.JSON(401, gin.H{"success": false, "message": "Invalid credentials"})
+		c.JSON(401, gin.H{
+			"success": false,
+			"message": "Invalid credentials",
+		})
 		return
 	}
 
@@ -273,306 +306,6 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 	})
 }
 
-// GetProfile godoc
-// @Summary Get user profile
-// @Description Get current user profile
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} models.Response
-// @Router /auth/profile [get]
-func (ctrl *AuthController) GetProfile(c *gin.Context) {
-	userID := c.GetInt("user_id")
-
-	var email, role, fullName, phone, address, photoURL string
-	models.DB.QueryRow(context.Background(),
-		`SELECT u.email, u.role, COALESCE(p.full_name,''), COALESCE(p.phone,''), 
-		COALESCE(p.address,''), COALESCE(p.photo_url,'') 
-		FROM users u LEFT JOIN user_profiles p ON u.id=p.user_id WHERE u.id=$1`,
-		userID).Scan(&email, &role, &fullName, &phone, &address, &photoURL)
-
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "Profile retrieved",
-		"data": gin.H{
-			"id":        userID,
-			"email":     email,
-			"role":      role,
-			"full_name": fullName,
-			"phone":     phone,
-			"address":   address,
-			"photo_url": photoURL,
-		},
-	})
-}
-
-// UpdateProfile godoc
-// @Summary Update profile
-// @Description Update user profile information and change password
-// @Tags Profile
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param full_name formData string false "Full Name"
-// @Param phone formData string false "Phone"
-// @Param address formData string false "Address"
-// @Param photo formData file false "Profile photo"
-// @Param old_password formData string false "Old Password"
-// @Param new_password formData string false "New Password"
-// @Param confirm_password formData string false "Confirm New Password"
-// @Success 200 {object} models.Response
-// @Router /auth/profile [patch]
-func (ctrl *AuthController) UpdateProfile(c *gin.Context) {
-	userID := c.GetInt("user_id")
-
-	fullName := strings.TrimSpace(c.PostForm("full_name"))
-	phone := strings.TrimSpace(c.PostForm("phone"))
-	address := strings.TrimSpace(c.PostForm("address"))
-	oldPassword := c.PostForm("old_password")
-	newPassword := c.PostForm("new_password")
-	confirmPassword := c.PostForm("confirm_password")
-
-	if fullName != "" && len(fullName) < 3 {
-		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
-		return
-	}
-
-	if !isValidPhone(phone) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
-		return
-	}
-
-	if oldPassword != "" || newPassword != "" || confirmPassword != "" {
-		if oldPassword == "" || newPassword == "" || confirmPassword == "" {
-			c.JSON(400, gin.H{"success": false, "message": "All password fields are required for password change"})
-			return
-		}
-
-		if !isValidPassword(newPassword) {
-			c.JSON(400, gin.H{"success": false, "message": "New password must be at least 6 characters"})
-			return
-		}
-
-		if newPassword != confirmPassword {
-			c.JSON(400, gin.H{"success": false, "message": "New password and confirm password do not match"})
-			return
-		}
-
-		if oldPassword == newPassword {
-			c.JSON(400, gin.H{"success": false, "message": "New password must be different from old password"})
-			return
-		}
-
-		var currentHash string
-		err := models.DB.QueryRow(context.Background(),
-			"SELECT password FROM users WHERE id=$1", userID).Scan(&currentHash)
-		if err != nil {
-			c.JSON(500, gin.H{"success": false, "message": "Failed to verify password"})
-			return
-		}
-
-		if !verifyPassword(currentHash, oldPassword) {
-			c.JSON(400, gin.H{"success": false, "message": "Invalid old password"})
-			return
-		}
-
-		newHash, _ := hashPassword(newPassword)
-		models.DB.Exec(context.Background(),
-			"UPDATE users SET password=$1, updated_at=$2 WHERE id=$3",
-			newHash, time.Now(), userID)
-	}
-
-	photoURL := ""
-	file, err := c.FormFile("photo")
-	if err == nil {
-		uploadedPath, uploadErr := uploadFile(c, file, "profiles")
-		if uploadErr != nil {
-			c.JSON(400, gin.H{"success": false, "message": uploadErr.Error()})
-			return
-		}
-
-		photoURL = uploadedPath
-
-		var oldPhoto string
-		models.DB.QueryRow(context.Background(),
-			"SELECT COALESCE(photo_url, '') FROM user_profiles WHERE user_id=$1", userID).Scan(&oldPhoto)
-		if oldPhoto != "" {
-			deleteFile(oldPhoto)
-		}
-	}
-
-	if photoURL != "" {
-		models.DB.Exec(context.Background(),
-			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, photo_url=$4, updated_at=$5 WHERE user_id=$6",
-			fullName, phone, address, photoURL, time.Now(), userID)
-	} else {
-		models.DB.Exec(context.Background(),
-			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
-			fullName, phone, address, time.Now(), userID)
-	}
-
-	responseData := gin.H{
-		"success": true,
-		"message": "Profile updated successfully",
-	}
-
-	if photoURL != "" {
-		responseData["data"] = gin.H{"photo_url": photoURL}
-	}
-
-	c.JSON(200, responseData)
-}
-
-// GetAdminProfile godoc
-// @Summary Get admin profile
-// @Description Get current admin profile
-// @Tags Admin - Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} models.Response
-// @Router /admin/profile [get]
-func (ctrl *AuthController) GetAdminProfile(c *gin.Context) {
-	userID := c.GetInt("user_id")
-
-	var email, role, fullName, phone, address, photoURL string
-	models.DB.QueryRow(context.Background(),
-		`SELECT u.email, u.role, COALESCE(p.full_name,''), COALESCE(p.phone,''), 
-		COALESCE(p.address,''), COALESCE(p.photo_url,'') 
-		FROM users u LEFT JOIN user_profiles p ON u.id=p.user_id WHERE u.id=$1`,
-		userID).Scan(&email, &role, &fullName, &phone, &address, &photoURL)
-
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "Admin profile retrieved",
-		"data": gin.H{
-			"id":        userID,
-			"email":     email,
-			"role":      role,
-			"full_name": fullName,
-			"phone":     phone,
-			"address":   address,
-			"photo_url": photoURL,
-		},
-	})
-}
-
-// UpdateAdminProfile godoc
-// @Summary Update admin profile
-// @Description Update admin profile information
-// @Tags Admin - Profile
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param full_name formData string false "Full Name"
-// @Param phone formData string false "Phone"
-// @Param address formData string false "Address"
-// @Param photo formData file false "Profile photo"
-// @Param old_password formData string false "Old Password"
-// @Param new_password formData string false "New Password"
-// @Param confirm_password formData string false "Confirm New Password"
-// @Success 200 {object} models.Response
-// @Router /admin/profile [patch]
-func (ctrl *AuthController) UpdateAdminProfile(c *gin.Context) {
-	userID := c.GetInt("user_id")
-
-	fullName := strings.TrimSpace(c.PostForm("full_name"))
-	phone := strings.TrimSpace(c.PostForm("phone"))
-	address := strings.TrimSpace(c.PostForm("address"))
-	oldPassword := c.PostForm("old_password")
-	newPassword := c.PostForm("new_password")
-	confirmPassword := c.PostForm("confirm_password")
-
-	if fullName != "" && len(fullName) < 3 {
-		c.JSON(400, gin.H{"success": false, "message": "Full name must be at least 3 characters"})
-		return
-	}
-
-	if !isValidPhone(phone) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid phone number"})
-		return
-	}
-
-	if oldPassword != "" || newPassword != "" || confirmPassword != "" {
-		if oldPassword == "" || newPassword == "" || confirmPassword == "" {
-			c.JSON(400, gin.H{"success": false, "message": "All password fields are required for password change"})
-			return
-		}
-
-		if !isValidPassword(newPassword) {
-			c.JSON(400, gin.H{"success": false, "message": "New password must be at least 6 characters"})
-			return
-		}
-
-		if newPassword != confirmPassword {
-			c.JSON(400, gin.H{"success": false, "message": "New password and confirm password do not match"})
-			return
-		}
-
-		if oldPassword == newPassword {
-			c.JSON(400, gin.H{"success": false, "message": "New password must be different from old password"})
-			return
-		}
-
-		var currentHash string
-		err := models.DB.QueryRow(context.Background(),
-			"SELECT password FROM users WHERE id=$1", userID).Scan(&currentHash)
-		if err != nil {
-			c.JSON(500, gin.H{"success": false, "message": "Failed to verify password"})
-			return
-		}
-
-		if !verifyPassword(currentHash, oldPassword) {
-			c.JSON(400, gin.H{"success": false, "message": "Invalid old password"})
-			return
-		}
-
-		newHash, _ := hashPassword(newPassword)
-		models.DB.Exec(context.Background(),
-			"UPDATE users SET password=$1, updated_at=$2 WHERE id=$3",
-			newHash, time.Now(), userID)
-	}
-
-	photoURL := ""
-	file, err := c.FormFile("photo")
-	if err == nil {
-		uploadedPath, uploadErr := uploadFile(c, file, "profiles")
-		if uploadErr != nil {
-			c.JSON(400, gin.H{"success": false, "message": uploadErr.Error()})
-			return
-		}
-
-		photoURL = uploadedPath
-
-		var oldPhoto string
-		models.DB.QueryRow(context.Background(),
-			"SELECT COALESCE(photo_url, '') FROM user_profiles WHERE user_id=$1", userID).Scan(&oldPhoto)
-		if oldPhoto != "" {
-			deleteFile(oldPhoto)
-		}
-	}
-
-	if photoURL != "" {
-		models.DB.Exec(context.Background(),
-			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, photo_url=$4, updated_at=$5 WHERE user_id=$6",
-			fullName, phone, address, photoURL, time.Now(), userID)
-	} else {
-		models.DB.Exec(context.Background(),
-			"UPDATE user_profiles SET full_name=$1, phone=$2, address=$3, updated_at=$4 WHERE user_id=$5",
-			fullName, phone, address, time.Now(), userID)
-	}
-
-	responseData := gin.H{
-		"success": true,
-		"message": "Admin profile updated successfully",
-	}
-
-	if photoURL != "" {
-		responseData["data"] = gin.H{"photo_url": photoURL}
-	}
-
-	c.JSON(200, responseData)
-}
-
 // ForgotPassword godoc
 // @Summary Request password reset
 // @Description Send OTP
@@ -586,12 +319,18 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 	email := strings.TrimSpace(c.PostForm("email"))
 
 	if email == "" {
-		c.JSON(400, gin.H{"success": false, "message": "Email is required"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Email is required",
+		})
 		return
 	}
 
 	if !isValidEmail(email) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid email format",
+		})
 		return
 	}
 
@@ -600,7 +339,10 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 		"SELECT id FROM users WHERE email=$1", email).Scan(&userID)
 
 	if err != nil {
-		c.JSON(404, gin.H{"success": false, "message": "Email not found"})
+		c.JSON(404, gin.H{
+			"success": false,
+			"message": "Email not found",
+		})
 		return
 	}
 
@@ -612,13 +354,19 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 
 		err = models.RedisClient.Set(ctx, redisKey, otp, 5*time.Minute).Err()
 		if err != nil {
-			c.JSON(500, gin.H{"success": false, "message": "Failed to generate OTP"})
+			c.JSON(500, gin.H{
+				"success": false,
+				"message": "Failed to generate OTP",
+			})
 			return
 		}
 
 		fmt.Printf("[OTP Generated] Email: %s, OTP: %s, Expires: 5 minutes\n", email, otp)
 	} else {
-		c.JSON(500, gin.H{"success": false, "message": "Redis not available"})
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Redis not available",
+		})
 		return
 	}
 
@@ -651,32 +399,50 @@ func (ctrl *AuthController) VerifyOTP(c *gin.Context) {
 	confirmPassword := c.PostForm("confirm_password")
 
 	if email == "" || otp == "" || newPassword == "" || confirmPassword == "" {
-		c.JSON(400, gin.H{"success": false, "message": "All fields are required"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "All fields are required",
+		})
 		return
 	}
 
 	if !isValidEmail(email) {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid email format"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid email format",
+		})
 		return
 	}
 
 	if len(otp) != 6 {
-		c.JSON(400, gin.H{"success": false, "message": "OTP must be 6 digits"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "OTP must be 6 digits",
+		})
 		return
 	}
 
 	if !isValidPassword(newPassword) {
-		c.JSON(400, gin.H{"success": false, "message": "Password must be at least 6 characters"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Password must be at least 6 characters",
+		})
 		return
 	}
 
 	if newPassword != confirmPassword {
-		c.JSON(400, gin.H{"success": false, "message": "Passwords do not match"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Passwords do not match",
+		})
 		return
 	}
 
 	if models.RedisClient == nil {
-		c.JSON(500, gin.H{"success": false, "message": "Redis not available"})
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Redis not available",
+		})
 		return
 	}
 
@@ -685,12 +451,18 @@ func (ctrl *AuthController) VerifyOTP(c *gin.Context) {
 
 	storedOTP, err := models.RedisClient.Get(ctx, redisKey).Result()
 	if err != nil {
-		c.JSON(404, gin.H{"success": false, "message": "OTP not found or expired"})
+		c.JSON(404, gin.H{
+			"success": false,
+			"message": "OTP not found or expired",
+		})
 		return
 	}
 
 	if storedOTP != otp {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid OTP code"})
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Invalid OTP code",
+		})
 		return
 	}
 
@@ -700,7 +472,10 @@ func (ctrl *AuthController) VerifyOTP(c *gin.Context) {
 	err = models.DB.QueryRow(context.Background(),
 		"SELECT id FROM users WHERE email=$1", email).Scan(&userID)
 	if err != nil {
-		c.JSON(404, gin.H{"success": false, "message": "User not found"})
+		c.JSON(404, gin.H{
+			"success": false,
+			"message": "User not found",
+		})
 		return
 	}
 
@@ -710,7 +485,10 @@ func (ctrl *AuthController) VerifyOTP(c *gin.Context) {
 		newHash, time.Now(), userID)
 
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "Failed to reset password"})
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Failed to reset password",
+		})
 		return
 	}
 
