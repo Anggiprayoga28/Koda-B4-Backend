@@ -131,7 +131,7 @@ func (ctrl *ProductController) GetAllCategories(c *gin.Context) {
 			log.Printf("Error scanning category row: %v", err)
 			continue
 		}
-		categories = append(categories, gin.H{"id": id, "name": name, "isActive": isActive, "createdAt": createdAt})
+		categories = append(categories, gin.H{"id": id, "name": name, "is_active": isActive, "created_at": createdAt})
 	}
 
 	c.JSON(200, gin.H{"success": true, "message": "Categories retrieved", "data": categories})
@@ -187,7 +187,7 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 	log.Printf("Total products: %d, Page: %d, Limit: %d, Offset: %d", total, page, limit, offset)
 
 	rows, err := models.DB.Query(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true ORDER BY created_at DESC LIMIT $1 OFFSET $2",
 		limit, offset)
 
 	if err != nil {
@@ -200,7 +200,7 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.CloudinaryID, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			log.Printf("Error scanning product row: %v", err)
 			continue
@@ -208,10 +208,10 @@ func (ctrl *ProductController) GetAllProducts(c *gin.Context) {
 
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
-			"categoryId": p.CategoryID, "price": p.Price, "stock": p.Stock,
-			"imageUrl": p.ImageURL, "isFlashSale": p.IsFlashSale,
-			"isFavorite": p.IsFavorite, "isBuy1Get1": p.IsBuy1Get1,
-			"isActive": p.IsActive, "createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
+			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		})
 	}
 
@@ -256,10 +256,10 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 	sortName := c.Query("sort_name")
 	sortPrice := c.Query("sort_price")
 	sortType := c.Query("sort")
-	minPrice, _ := strconv.Atoi(c.Query("minPrice"))
-	maxPrice, _ := strconv.Atoi(c.Query("maxPrice"))
+	minPrice, _ := strconv.Atoi(c.Query("min_price"))
+	maxPrice, _ := strconv.Atoi(c.Query("max_price"))
 
-	query := "SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true"
+	query := "SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_active=true"
 	countQuery := "SELECT COUNT(*) FROM products WHERE is_active=true"
 	args := []interface{}{}
 	argCount := 1
@@ -348,7 +348,7 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.CloudinaryID, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			log.Printf("Error scanning product: %v", err)
 			continue
@@ -356,10 +356,10 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
-			"categoryId": p.CategoryID, "price": p.Price, "stock": p.Stock,
-			"imageUrl": p.ImageURL, "isFlashSale": p.IsFlashSale,
-			"isFavorite": p.IsFavorite, "isBuy1Get1": p.IsBuy1Get1,
-			"isActive": p.IsActive, "createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
+			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		})
 	}
 
@@ -375,7 +375,7 @@ func (ctrl *ProductController) FilterProducts(c *gin.Context) {
 // @Router /products/favorite [get]
 func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
 	rows, err := models.DB.Query(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_favorite=true AND is_active=true ORDER BY created_at DESC")
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE is_favorite=true AND is_active=true ORDER BY created_at DESC")
 
 	if err != nil {
 		log.Printf("Error querying favorite products: %v", err)
@@ -387,7 +387,7 @@ func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
 	products := []gin.H{}
 	for rows.Next() {
 		var p models.Product
-		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.CloudinaryID, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			log.Printf("Error scanning product: %v", err)
 			continue
@@ -395,10 +395,10 @@ func (ctrl *ProductController) GetFavoriteProducts(c *gin.Context) {
 
 		products = append(products, gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
-			"categoryId": p.CategoryID, "price": p.Price, "stock": p.Stock,
-			"imageUrl": p.ImageURL, "isFlashSale": p.IsFlashSale,
-			"isFavorite": p.IsFavorite, "isBuy1Get1": p.IsBuy1Get1,
-			"isActive": p.IsActive, "createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
+			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		})
 	}
 
@@ -417,8 +417,8 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 
 	var p models.Product
 	err := models.DB.QueryRow(context.Background(),
-		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE id=$1",
-		id).Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.CloudinaryID, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
+		"SELECT id, name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active, created_at, updated_at FROM products WHERE id=$1",
+		id).Scan(&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.Price, &p.Stock, &p.ImageURL, &p.IsFlashSale, &p.IsFavorite, &p.IsBuy1Get1, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 
 	if err != nil {
 		log.Printf("Error finding product: %v", err)
@@ -431,10 +431,10 @@ func (ctrl *ProductController) GetProductByID(c *gin.Context) {
 		"message": "Product retrieved successfully",
 		"data": gin.H{
 			"id": p.ID, "name": p.Name, "description": p.Description,
-			"categoryId": p.CategoryID, "price": p.Price, "stock": p.Stock,
-			"imageUrl": p.ImageURL, "isFlashSale": p.IsFlashSale,
-			"isFavorite": p.IsFavorite, "isBuy1Get1": p.IsBuy1Get1,
-			"isActive": p.IsActive, "createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
+			"category_id": p.CategoryID, "price": p.Price, "stock": p.Stock,
+			"image_url": p.ImageURL, "is_flash_sale": p.IsFlashSale,
+			"is_favorite": p.IsFavorite, "is_buy1get1": p.IsBuy1Get1,
+			"is_active": p.IsActive, "created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		},
 	})
 }
@@ -461,12 +461,12 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 
 	name := strings.TrimSpace(c.PostForm("name"))
 	description := strings.TrimSpace(c.PostForm("description"))
-	categoryID, _ := strconv.Atoi(c.PostForm("categoryId"))
+	categoryID, _ := strconv.Atoi(c.PostForm("category_id"))
 	price, _ := strconv.Atoi(c.PostForm("price"))
 	stock, _ := strconv.Atoi(c.PostForm("stock"))
-	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("isFlashSale", "false"))
-	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("isFavorite", "false"))
-	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("isBuy1Get1", "false"))
+	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("is_flash_sale", "false"))
+	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("is_favorite", "false"))
+	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", "false"))
 
 	if len(name) < 3 {
 		c.JSON(400, gin.H{"success": false, "message": "Product name must be at least 3 characters"})
@@ -488,7 +488,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	var imageURL, cloudinaryID string
+	var imageURL, cloudinaryPublicID string
 
 	file, fileHeader, err := c.Request.FormFile("image")
 	if err == nil {
@@ -496,48 +496,67 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err != nil {
-			log.Printf("Error initializing Cloudinary: %v", err)
-			c.JSON(500, gin.H{"success": false, "message": "Failed to initialize image service"})
-			return
-		}
+			log.Printf("Cloudinary not configured, skipping upload: %v", err)
+		} else {
+			if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
+				c.JSON(400, gin.H{"success": false, "message": err.Error()})
+				return
+			}
 
-		if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
-			c.JSON(400, gin.H{"success": false, "message": err.Error()})
-			return
-		}
+			imageURL, cloudinaryPublicID, err = cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
+			if err != nil {
+				log.Printf("Error uploading to Cloudinary: %v", err)
+				c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
+				return
+			}
 
-		imageURL, cloudinaryID, err = cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
-		if err != nil {
-			log.Printf("Error uploading to Cloudinary: %v", err)
-			c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
-			return
+			log.Printf("Image uploaded to Cloudinary successfully: %s", imageURL)
 		}
-
-		log.Printf("Image uploaded to Cloudinary successfully: %s", imageURL)
 	} else {
 		log.Printf("No image uploaded or error: %v", err)
 	}
 
 	now := time.Now()
-	insertQuery := `
-		INSERT INTO products 
-		(name, description, category_id, price, stock, image_url, cloudinary_id, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12) 
-		RETURNING id
-	`
+
+	var hasCloudinaryColumn bool
+	err = models.DB.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='cloudinary_id')").Scan(&hasCloudinaryColumn)
+
+	if err != nil {
+		log.Printf("Error checking column existence: %v", err)
+		hasCloudinaryColumn = false
+	}
 
 	var id int
-	err = models.DB.QueryRow(ctx, insertQuery,
-		name, description, categoryID, price, stock, imageURL, cloudinaryID,
-		isFlashSale, isFavorite, isBuy1Get1, now, now).Scan(&id)
+	if hasCloudinaryColumn {
+		insertQuery := `
+			INSERT INTO products 
+			(name, description, category_id, price, stock, image_url, cloudinary_id, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12) 
+			RETURNING id
+		`
+		err = models.DB.QueryRow(ctx, insertQuery,
+			name, description, categoryID, price, stock, imageURL, cloudinaryPublicID,
+			isFlashSale, isFavorite, isBuy1Get1, now, now).Scan(&id)
+	} else {
+		insertQuery := `
+			INSERT INTO products 
+			(name, description, category_id, price, stock, image_url, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11) 
+			RETURNING id
+		`
+		err = models.DB.QueryRow(ctx, insertQuery,
+			name, description, categoryID, price, stock, imageURL,
+			isFlashSale, isFavorite, isBuy1Get1, now, now).Scan(&id)
+	}
 
 	if err != nil {
 		log.Printf("Error inserting product to database: %v", err)
 
-		if cloudinaryID != "" {
+		if cloudinaryPublicID != "" {
 			cloudinaryService, _ := models.NewCloudinaryService()
 			if cloudinaryService != nil {
-				cloudinaryService.DeleteImage(ctx, cloudinaryID)
+				cloudinaryService.DeleteImage(ctx, cloudinaryPublicID)
 			}
 		}
 
@@ -549,23 +568,28 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 
 	invalidateProductCache()
 
+	responseData := gin.H{
+		"id":            id,
+		"name":          name,
+		"description":   description,
+		"category_id":   categoryID,
+		"price":         price,
+		"stock":         stock,
+		"image_url":     imageURL,
+		"is_flash_sale": isFlashSale,
+		"is_favorite":   isFavorite,
+		"is_buy1get1":   isBuy1Get1,
+		"is_active":     true,
+	}
+
+	if hasCloudinaryColumn && cloudinaryPublicID != "" {
+		responseData["cloudinary_id"] = cloudinaryPublicID
+	}
+
 	c.JSON(201, gin.H{
 		"success": true,
 		"message": "Product created successfully",
-		"data": gin.H{
-			"id":           id,
-			"name":         name,
-			"description":  description,
-			"categoryId":   categoryID,
-			"price":        price,
-			"stock":        stock,
-			"imageUrl":     imageURL,
-			"cloudinaryId": cloudinaryID,
-			"isFlashSale":  isFlashSale,
-			"isFavorite":   isFavorite,
-			"isBuy1Get1":   isBuy1Get1,
-			"isActive":     true,
-		},
+		"data":    responseData,
 	})
 }
 
@@ -592,12 +616,30 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	ctx := context.Background()
 
-	var existingProduct models.Product
+	var hasCloudinaryColumn bool
 	err := models.DB.QueryRow(ctx,
-		"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active FROM products WHERE id=$1",
-		id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
-		&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL, &existingProduct.CloudinaryID,
-		&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
+		"SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='cloudinary_id')").Scan(&hasCloudinaryColumn)
+
+	if err != nil {
+		log.Printf("Error checking column existence: %v", err)
+		hasCloudinaryColumn = false
+	}
+
+	var existingProduct models.Product
+
+	if hasCloudinaryColumn {
+		err = models.DB.QueryRow(ctx,
+			"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active FROM products WHERE id=$1",
+			id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
+			&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL, &existingProduct.CloudinaryID,
+			&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
+	} else {
+		err = models.DB.QueryRow(ctx,
+			"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active FROM products WHERE id=$1",
+			id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
+			&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL,
+			&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
+	}
 
 	if err != nil {
 		log.Printf("Error finding product: %v", err)
@@ -607,13 +649,13 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 
 	name := strings.TrimSpace(c.DefaultPostForm("name", existingProduct.Name))
 	description := strings.TrimSpace(c.DefaultPostForm("description", existingProduct.Description))
-	categoryID, _ := strconv.Atoi(c.DefaultPostForm("categoryId", strconv.Itoa(existingProduct.CategoryID)))
+	categoryID, _ := strconv.Atoi(c.DefaultPostForm("category_id", strconv.Itoa(existingProduct.CategoryID)))
 	price, _ := strconv.Atoi(c.DefaultPostForm("price", strconv.Itoa(existingProduct.Price)))
 	stock, _ := strconv.Atoi(c.DefaultPostForm("stock", strconv.Itoa(existingProduct.Stock)))
-	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("isFlashSale", strconv.FormatBool(existingProduct.IsFlashSale)))
-	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("isFavorite", strconv.FormatBool(existingProduct.IsFavorite)))
-	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("isBuy1Get1", strconv.FormatBool(existingProduct.IsBuy1Get1)))
-	isActive, _ := strconv.ParseBool(c.DefaultPostForm("isActive", strconv.FormatBool(existingProduct.IsActive)))
+	isFlashSale, _ := strconv.ParseBool(c.DefaultPostForm("is_flash_sale", strconv.FormatBool(existingProduct.IsFlashSale)))
+	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("is_favorite", strconv.FormatBool(existingProduct.IsFavorite)))
+	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", strconv.FormatBool(existingProduct.IsBuy1Get1)))
+	isActive, _ := strconv.ParseBool(c.DefaultPostForm("is_active", strconv.FormatBool(existingProduct.IsActive)))
 
 	if name != existingProduct.Name && len(name) < 3 {
 		c.JSON(400, gin.H{"success": false, "message": "Product name must be at least 3 characters"})
@@ -641,7 +683,7 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	}
 
 	imageURL := existingProduct.ImageURL
-	cloudinaryID := existingProduct.CloudinaryID
+	cloudinaryPublicID := existingProduct.CloudinaryID
 
 	file, fileHeader, err := c.Request.FormFile("image")
 	if err == nil {
@@ -649,37 +691,41 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err != nil {
-			log.Printf("Error initializing Cloudinary: %v", err)
-			c.JSON(500, gin.H{"success": false, "message": "Failed to initialize image service"})
-			return
-		}
-
-		if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
-			c.JSON(400, gin.H{"success": false, "message": err.Error()})
-			return
-		}
-
-		newImageURL, newCloudinaryID, err := cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
-		if err != nil {
-			log.Printf("Error uploading to Cloudinary: %v", err)
-			c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
-			return
-		}
-
-		if existingProduct.CloudinaryID != "" {
-			if err := cloudinaryService.DeleteImage(ctx, existingProduct.CloudinaryID); err != nil {
-				log.Printf("Warning: Failed to delete old image from Cloudinary: %v", err)
+			log.Printf("Cloudinary not configured, skipping upload: %v", err)
+		} else {
+			if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
+				c.JSON(400, gin.H{"success": false, "message": err.Error()})
+				return
 			}
-		}
 
-		imageURL = newImageURL
-		cloudinaryID = newCloudinaryID
-		log.Printf("Image updated successfully: %s", imageURL)
+			newImageURL, newCloudinaryID, err := cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
+			if err != nil {
+				log.Printf("Error uploading to Cloudinary: %v", err)
+				c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
+				return
+			}
+
+			if existingProduct.CloudinaryID != "" {
+				if err := cloudinaryService.DeleteImage(ctx, existingProduct.CloudinaryID); err != nil {
+					log.Printf("Warning: Failed to delete old image from Cloudinary: %v", err)
+				}
+			}
+
+			imageURL = newImageURL
+			cloudinaryPublicID = newCloudinaryID
+			log.Printf("Image updated successfully: %s", imageURL)
+		}
 	}
 
-	_, err = models.DB.Exec(ctx,
-		"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, cloudinary_id=$7, is_flash_sale=$8, is_favorite=$9, is_buy1get1=$10, is_active=$11, updated_at=$12 WHERE id=$13",
-		name, description, categoryID, price, stock, imageURL, cloudinaryID, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
+	if hasCloudinaryColumn {
+		_, err = models.DB.Exec(ctx,
+			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, cloudinary_id=$7, is_flash_sale=$8, is_favorite=$9, is_buy1get1=$10, is_active=$11, updated_at=$12 WHERE id=$13",
+			name, description, categoryID, price, stock, imageURL, cloudinaryPublicID, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
+	} else {
+		_, err = models.DB.Exec(ctx,
+			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, is_flash_sale=$7, is_favorite=$8, is_buy1get1=$9, is_active=$10, updated_at=$11 WHERE id=$12",
+			name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
+	}
 
 	if err != nil {
 		log.Printf("Error updating product: %v", err)
@@ -709,9 +755,24 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	var cloudinaryID string
+	var hasCloudinaryColumn bool
 	err := models.DB.QueryRow(ctx,
-		"SELECT COALESCE(cloudinary_id, '') FROM products WHERE id=$1", id).Scan(&cloudinaryID)
+		"SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='cloudinary_id')").Scan(&hasCloudinaryColumn)
+
+	if err != nil {
+		log.Printf("Error checking column existence: %v", err)
+		hasCloudinaryColumn = false
+	}
+
+	var cloudinaryPublicID string
+
+	if hasCloudinaryColumn {
+		err = models.DB.QueryRow(ctx,
+			"SELECT COALESCE(cloudinary_id, '') FROM products WHERE id=$1", id).Scan(&cloudinaryPublicID)
+	} else {
+		err = models.DB.QueryRow(ctx,
+			"SELECT id FROM products WHERE id=$1", id).Scan(&id)
+	}
 
 	if err != nil {
 		log.Printf("Error finding product to delete: %v", err)
@@ -726,10 +787,10 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	if cloudinaryID != "" {
+	if cloudinaryPublicID != "" {
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err == nil {
-			if err := cloudinaryService.DeleteImage(ctx, cloudinaryID); err != nil {
+			if err := cloudinaryService.DeleteImage(ctx, cloudinaryPublicID); err != nil {
 				log.Printf("Warning: Failed to delete image from Cloudinary: %v", err)
 			}
 		}
