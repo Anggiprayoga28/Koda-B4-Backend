@@ -594,7 +594,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 }
 
 // @Summary Update product
-// @Description Update product with Cloudinary upload (Admin)
+// @Description Update product (Admin)
 // @Tags Admin - Products
 // @Security BearerAuth
 // @Accept multipart/form-data
@@ -730,49 +730,54 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		}
 	}
 
-	var cmdTag interface{}
+	var commandTag interface{}
 
 	if hasCloudinaryColumn {
 		log.Printf("Executing UPDATE with cloudinary_id for product ID %d", id)
-		cmdTag, err = models.DB.Exec(ctx,
+		commandTag, err = models.DB.Exec(ctx,
 			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, cloudinary_id=$7, is_flash_sale=$8, is_favorite=$9, is_buy1get1=$10, is_active=$11, updated_at=$12 WHERE id=$13",
 			name, description, categoryID, price, stock, imageURL, cloudinaryPublicID, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
 	} else {
 		log.Printf("Executing UPDATE without cloudinary_id for product ID %d", id)
-		cmdTag, err = models.DB.Exec(ctx,
+		commandTag, err = models.DB.Exec(ctx,
 			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, is_flash_sale=$7, is_favorite=$8, is_buy1get1=$9, is_active=$10, updated_at=$11 WHERE id=$12",
 			name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
 	}
 
 	if err != nil {
-		log.Printf("Error updating product: %v", err)
+		log.Printf("ERROR executing UPDATE: %v", err)
 		c.JSON(500, gin.H{"success": false, "message": "Failed to update product: " + err.Error()})
 		return
 	}
 
-	rowsAffected := cmdTag.(interface{ RowsAffected() int64 }).RowsAffected()
-	log.Printf("UPDATE executed, rows affected: %d", rowsAffected)
+	rowsAffected := int64(0)
+	if ct, ok := commandTag.(interface{ RowsAffected() int64 }); ok {
+		rowsAffected = ct.RowsAffected()
+	}
+
+	log.Printf("UPDATE executed successfully, rows affected: %d", rowsAffected)
 
 	if rowsAffected == 0 {
 		log.Printf("WARNING: No rows were updated for product ID %d", id)
-		c.JSON(404, gin.H{"success": false, "message": "Product not found or no changes made"})
-		return
 	}
 
 	var verifyName string
 	var verifyPrice int
-	err = models.DB.QueryRow(ctx, "SELECT name, price FROM products WHERE id=$1", id).Scan(&verifyName, &verifyPrice)
+	var verifyStock int
+	err = models.DB.QueryRow(ctx, "SELECT name, price, stock FROM products WHERE id=$1", id).Scan(&verifyName, &verifyPrice, &verifyStock)
 	if err != nil {
-		log.Printf("WARNING: Product updated but verification failed: %v", err)
+		log.Printf("WARNING: Verification query failed: %v", err)
 	} else {
-		log.Printf("Verification - ID: %d, Name: %s (expected: %s), Price: %d (expected: %d)",
-			id, verifyName, name, verifyPrice, price)
+		log.Printf("Post-update verification: ID=%d, Name=%s, Price=%d, Stock=%d", id, verifyName, verifyPrice, verifyStock)
 
 		if verifyName != name {
-			log.Printf("ERROR: Database value mismatch - Expected name: %s, Got: %s", name, verifyName)
+			log.Printf("ERROR: Name mismatch - Expected: %s, Got: %s", name, verifyName)
 		}
 		if verifyPrice != price {
-			log.Printf("ERROR: Database price mismatch - Expected: %d, Got: %d", price, verifyPrice)
+			log.Printf("ERROR: Price mismatch - Expected: %d, Got: %d", price, verifyPrice)
+		}
+		if verifyStock != stock {
+			log.Printf("ERROR: Stock mismatch - Expected: %d, Got: %d", stock, verifyStock)
 		}
 	}
 
@@ -783,8 +788,9 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		"message": "Product updated successfully",
 		"data": gin.H{
 			"id":            id,
-			"name":          name,
-			"price":         price,
+			"name":          verifyName,
+			"price":         verifyPrice,
+			"stock":         verifyStock,
 			"rows_affected": rowsAffected,
 		},
 	})
