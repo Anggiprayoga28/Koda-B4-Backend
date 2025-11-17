@@ -494,26 +494,33 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	if err == nil {
 		defer file.Close()
 
+		log.Printf("Image file received: %s (size: %d bytes)", fileHeader.Filename, fileHeader.Size)
+
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err != nil {
-			log.Printf("Cloudinary not configured, skipping upload: %v", err)
-		} else {
-			if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
-				c.JSON(400, gin.H{"success": false, "message": err.Error()})
-				return
-			}
-
-			imageURL, cloudinaryPublicID, err = cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
-			if err != nil {
-				log.Printf("Error uploading to Cloudinary: %v", err)
-				c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
-				return
-			}
-
-			log.Printf("Image uploaded to Cloudinary successfully: %s", imageURL)
+			log.Printf("ERROR: Cloudinary not configured: %v", err)
+			c.JSON(500, gin.H{"success": false, "message": "Image upload service not available"})
+			return
 		}
+
+		if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
+			log.Printf("ERROR: Image validation failed: %v", err)
+			c.JSON(400, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+
+		log.Printf("Image validation passed, uploading to Cloudinary...")
+
+		imageURL, cloudinaryPublicID, err = cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
+		if err != nil {
+			log.Printf("ERROR: Failed to upload to Cloudinary: %v", err)
+			c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
+			return
+		}
+
+		log.Printf("SUCCESS: Image uploaded to Cloudinary - URL: %s, ID: %s", imageURL, cloudinaryPublicID)
 	} else {
-		log.Printf("No image uploaded or error: %v", err)
+		log.Printf("No image uploaded: %v", err)
 	}
 
 	now := time.Now()
@@ -531,7 +538,8 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	if hasCloudinaryColumn {
 		insertQuery := `
 			INSERT INTO products 
-			(name, description, category_id, price, stock, image_url, cloudinary_id, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
+			(name, description, category_id, price, stock, image_url, cloudinary_id, 
+			 is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12) 
 			RETURNING id
 		`
@@ -541,7 +549,8 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	} else {
 		insertQuery := `
 			INSERT INTO products 
-			(name, description, category_id, price, stock, image_url, is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
+			(name, description, category_id, price, stock, image_url, 
+			 is_flash_sale, is_favorite, is_buy1get1, is_active, created_at, updated_at) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11) 
 			RETURNING id
 		`
@@ -551,12 +560,16 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 	}
 
 	if err != nil {
-		log.Printf("Error inserting product to database: %v", err)
+		log.Printf("ERROR: Failed to insert product to database: %v", err)
 
 		if cloudinaryPublicID != "" {
 			cloudinaryService, _ := models.NewCloudinaryService()
 			if cloudinaryService != nil {
-				cloudinaryService.DeleteImage(ctx, cloudinaryPublicID)
+				if deleteErr := cloudinaryService.DeleteImage(ctx, cloudinaryPublicID); deleteErr != nil {
+					log.Printf("WARNING: Failed to delete image during rollback: %v", deleteErr)
+				} else {
+					log.Printf("Rolled back: deleted uploaded image from Cloudinary")
+				}
 			}
 		}
 
@@ -564,7 +577,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Product created successfully with ID: %d", id)
+	log.Printf("SUCCESS: Product created with ID: %d", id)
 
 	invalidateProductCache()
 
@@ -580,6 +593,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 		"is_favorite":   isFavorite,
 		"is_buy1get1":   isBuy1Get1,
 		"is_active":     true,
+		"created_at":    now,
 	}
 
 	if hasCloudinaryColumn && cloudinaryPublicID != "" {
@@ -616,13 +630,9 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	ctx := context.Background()
 
-	if models.DB == nil {
-		log.Printf("Database connection is nil, attempting to reinitialize")
-		models.InitDB()
-		if models.DB == nil {
-			c.JSON(500, gin.H{"success": false, "message": "Database connection failed"})
-			return
-		}
+	if id <= 0 {
+		c.JSON(400, gin.H{"success": false, "message": "Invalid product ID"})
+		return
 	}
 
 	var hasCloudinaryColumn bool
@@ -638,25 +648,34 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 
 	if hasCloudinaryColumn {
 		err = models.DB.QueryRow(ctx,
-			"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active FROM products WHERE id=$1",
-			id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
-			&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL, &existingProduct.CloudinaryID,
-			&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
-	} else {
-		err = models.DB.QueryRow(ctx,
-			"SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active FROM products WHERE id=$1",
+			`SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), 
+			 COALESCE(cloudinary_id, ''), COALESCE(is_flash_sale, false), 
+			 COALESCE(is_favorite, false), COALESCE(is_buy1get1, false), is_active 
+			 FROM products WHERE id=$1`,
 			id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
 			&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL,
-			&existingProduct.IsFlashSale, &existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
+			&existingProduct.CloudinaryID, &existingProduct.IsFlashSale,
+			&existingProduct.IsFavorite, &existingProduct.IsBuy1Get1, &existingProduct.IsActive)
+	} else {
+		err = models.DB.QueryRow(ctx,
+			`SELECT name, description, category_id, price, stock, COALESCE(image_url, ''), 
+			 COALESCE(is_flash_sale, false), COALESCE(is_favorite, false), 
+			 COALESCE(is_buy1get1, false), is_active 
+			 FROM products WHERE id=$1`,
+			id).Scan(&existingProduct.Name, &existingProduct.Description, &existingProduct.CategoryID,
+			&existingProduct.Price, &existingProduct.Stock, &existingProduct.ImageURL,
+			&existingProduct.IsFlashSale, &existingProduct.IsFavorite,
+			&existingProduct.IsBuy1Get1, &existingProduct.IsActive)
 	}
 
 	if err != nil {
-		log.Printf("Error finding product: %v", err)
+		log.Printf("ERROR: Product not found: %v", err)
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
 		return
 	}
 
-	log.Printf("Found existing product: ID=%d, Name=%s", id, existingProduct.Name)
+	log.Printf("Found existing product: ID=%d, Name=%s, ImageURL=%s, CloudinaryID=%s",
+		id, existingProduct.Name, existingProduct.ImageURL, existingProduct.CloudinaryID)
 
 	name := strings.TrimSpace(c.DefaultPostForm("name", existingProduct.Name))
 	description := strings.TrimSpace(c.DefaultPostForm("description", existingProduct.Description))
@@ -668,20 +687,13 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", strconv.FormatBool(existingProduct.IsBuy1Get1)))
 	isActive, _ := strconv.ParseBool(c.DefaultPostForm("is_active", strconv.FormatBool(existingProduct.IsActive)))
 
-	log.Printf("Update params - Name: %s, Price: %d, Stock: %d", name, price, stock)
-
-	if name != existingProduct.Name && len(name) < 3 {
+	if len(name) < 3 {
 		c.JSON(400, gin.H{"success": false, "message": "Product name must be at least 3 characters"})
 		return
 	}
 
 	if categoryID <= 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Invalid category_id"})
-		return
-	}
-
-	if price < 0 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid price"})
 		return
 	}
 
@@ -698,88 +710,97 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	imageURL := existingProduct.ImageURL
 	cloudinaryPublicID := existingProduct.CloudinaryID
 
-	file, fileHeader, err := c.Request.FormFile("image")
-	if err == nil {
-		defer file.Close()
+	uploadedFile, fileHeader, fileErr := c.Request.FormFile("image")
+	if fileErr == nil {
+		defer uploadedFile.Close()
 
-		cloudinaryService, err := models.NewCloudinaryService()
-		if err != nil {
-			log.Printf("Cloudinary not configured, skipping upload: %v", err)
-		} else {
-			if err := cloudinaryService.ValidateImageFile(fileHeader); err != nil {
-				c.JSON(400, gin.H{"success": false, "message": err.Error()})
-				return
-			}
+		log.Printf("New image file received: %s (size: %d bytes)", fileHeader.Filename, fileHeader.Size)
 
-			newImageURL, newCloudinaryID, err := cloudinaryService.UploadImage(ctx, file, fileHeader.Filename, "products")
-			if err != nil {
-				log.Printf("Error uploading to Cloudinary: %v", err)
-				c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
-				return
-			}
-
-			if existingProduct.CloudinaryID != "" {
-				if err := cloudinaryService.DeleteImage(ctx, existingProduct.CloudinaryID); err != nil {
-					log.Printf("Warning: Failed to delete old image from Cloudinary: %v", err)
-				}
-			}
-
-			imageURL = newImageURL
-			cloudinaryPublicID = newCloudinaryID
-			log.Printf("Image updated successfully: %s", imageURL)
+		cloudinaryService, cloudinaryErr := models.NewCloudinaryService()
+		if cloudinaryErr != nil {
+			log.Printf("ERROR: Failed to initialize Cloudinary: %v", cloudinaryErr)
+			c.JSON(500, gin.H{"success": false, "message": "Image upload service not available"})
+			return
 		}
+
+		validateErr := cloudinaryService.ValidateImageFile(fileHeader)
+		if validateErr != nil {
+			log.Printf("ERROR: Image validation failed: %v", validateErr)
+			c.JSON(400, gin.H{"success": false, "message": validateErr.Error()})
+			return
+		}
+
+		log.Printf("Image validation passed, uploading to Cloudinary...")
+
+		newImageURL, newCloudinaryID, uploadErr := cloudinaryService.UploadImage(
+			ctx, uploadedFile, fileHeader.Filename, "products")
+
+		if uploadErr != nil {
+			log.Printf("ERROR: Cloudinary upload failed: %v", uploadErr)
+			c.JSON(500, gin.H{"success": false, "message": "Failed to upload image"})
+			return
+		}
+
+		log.Printf("SUCCESS: New image uploaded to Cloudinary - URL: %s, ID: %s", newImageURL, newCloudinaryID)
+
+		if existingProduct.CloudinaryID != "" {
+			log.Printf("Deleting old image from Cloudinary: %s", existingProduct.CloudinaryID)
+			deleteErr := cloudinaryService.DeleteImage(ctx, existingProduct.CloudinaryID)
+			if deleteErr != nil {
+				log.Printf("WARNING: Failed to delete old image: %v", deleteErr)
+			} else {
+				log.Printf("Old image deleted successfully from Cloudinary")
+			}
+		}
+
+		imageURL = newImageURL
+		cloudinaryPublicID = newCloudinaryID
+	} else {
+		log.Printf("No new image uploaded (keeping existing): %v", fileErr)
 	}
 
-	var commandTag interface{}
+	now := time.Now()
+	var updateErr error
 
 	if hasCloudinaryColumn {
-		log.Printf("Executing UPDATE with cloudinary_id for product ID %d", id)
-		commandTag, err = models.DB.Exec(ctx,
-			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, cloudinary_id=$7, is_flash_sale=$8, is_favorite=$9, is_buy1get1=$10, is_active=$11, updated_at=$12 WHERE id=$13",
-			name, description, categoryID, price, stock, imageURL, cloudinaryPublicID, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
+		_, updateErr = models.DB.Exec(ctx,
+			`UPDATE products 
+			 SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, 
+			     image_url=$6, cloudinary_id=$7, is_flash_sale=$8, is_favorite=$9, 
+			     is_buy1get1=$10, is_active=$11, updated_at=$12 
+			 WHERE id=$13`,
+			name, description, categoryID, price, stock, imageURL, cloudinaryPublicID,
+			isFlashSale, isFavorite, isBuy1Get1, isActive, now, id)
 	} else {
-		log.Printf("Executing UPDATE without cloudinary_id for product ID %d", id)
-		commandTag, err = models.DB.Exec(ctx,
-			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, is_flash_sale=$7, is_favorite=$8, is_buy1get1=$9, is_active=$10, updated_at=$11 WHERE id=$12",
-			name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
+		_, updateErr = models.DB.Exec(ctx,
+			`UPDATE products 
+			 SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, 
+			     image_url=$6, is_flash_sale=$7, is_favorite=$8, is_buy1get1=$9, 
+			     is_active=$10, updated_at=$11 
+			 WHERE id=$12`,
+			name, description, categoryID, price, stock, imageURL,
+			isFlashSale, isFavorite, isBuy1Get1, isActive, now, id)
 	}
 
-	if err != nil {
-		log.Printf("ERROR executing UPDATE: %v", err)
-		c.JSON(500, gin.H{"success": false, "message": "Failed to update product: " + err.Error()})
+	if updateErr != nil {
+		log.Printf("ERROR: Database update failed: %v", updateErr)
+
+		if uploadedFile != nil && cloudinaryPublicID != existingProduct.CloudinaryID {
+			cloudinaryService, _ := models.NewCloudinaryService()
+			if cloudinaryService != nil {
+				if deleteErr := cloudinaryService.DeleteImage(ctx, cloudinaryPublicID); deleteErr != nil {
+					log.Printf("WARNING: Failed to delete image during rollback: %v", deleteErr)
+				} else {
+					log.Printf("Rolled back: deleted newly uploaded image from Cloudinary")
+				}
+			}
+		}
+
+		c.JSON(500, gin.H{"success": false, "message": "Failed to update product: " + updateErr.Error()})
 		return
 	}
 
-	rowsAffected := int64(0)
-	if ct, ok := commandTag.(interface{ RowsAffected() int64 }); ok {
-		rowsAffected = ct.RowsAffected()
-	}
-
-	log.Printf("UPDATE executed successfully, rows affected: %d", rowsAffected)
-
-	if rowsAffected == 0 {
-		log.Printf("WARNING: No rows were updated for product ID %d", id)
-	}
-
-	var verifyName string
-	var verifyPrice int
-	var verifyStock int
-	err = models.DB.QueryRow(ctx, "SELECT name, price, stock FROM products WHERE id=$1", id).Scan(&verifyName, &verifyPrice, &verifyStock)
-	if err != nil {
-		log.Printf("WARNING: Verification query failed: %v", err)
-	} else {
-		log.Printf("Post-update verification: ID=%d, Name=%s, Price=%d, Stock=%d", id, verifyName, verifyPrice, verifyStock)
-
-		if verifyName != name {
-			log.Printf("ERROR: Name mismatch - Expected: %s, Got: %s", name, verifyName)
-		}
-		if verifyPrice != price {
-			log.Printf("ERROR: Price mismatch - Expected: %d, Got: %d", price, verifyPrice)
-		}
-		if verifyStock != stock {
-			log.Printf("ERROR: Stock mismatch - Expected: %d, Got: %d", stock, verifyStock)
-		}
-	}
+	log.Printf("SUCCESS: Product updated successfully - ID: %d", id)
 
 	invalidateProductCache()
 
@@ -788,10 +809,18 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		"message": "Product updated successfully",
 		"data": gin.H{
 			"id":            id,
-			"name":          verifyName,
-			"price":         verifyPrice,
-			"stock":         verifyStock,
-			"rows_affected": rowsAffected,
+			"name":          name,
+			"description":   description,
+			"category_id":   categoryID,
+			"price":         price,
+			"stock":         stock,
+			"image_url":     imageURL,
+			"cloudinary_id": cloudinaryPublicID,
+			"is_flash_sale": isFlashSale,
+			"is_favorite":   isFavorite,
+			"is_buy1get1":   isBuy1Get1,
+			"is_active":     isActive,
+			"updated_at":    now,
 		},
 	})
 }
@@ -833,28 +862,37 @@ func (ctrl *ProductController) DeleteProduct(c *gin.Context) {
 	}
 
 	if err != nil {
-		log.Printf("Error finding product to delete: %v", err)
+		log.Printf("ERROR: Product not found: %v", err)
 		c.JSON(404, gin.H{"success": false, "message": "Product not found"})
 		return
 	}
 
 	_, err = models.DB.Exec(ctx, "DELETE FROM products WHERE id=$1", id)
 	if err != nil {
-		log.Printf("Error deleting product: %v", err)
+		log.Printf("ERROR: Failed to delete product: %v", err)
 		c.JSON(500, gin.H{"success": false, "message": "Failed to delete product"})
 		return
 	}
+
+	log.Printf("SUCCESS: Product deleted from database - ID: %d", id)
 
 	if cloudinaryPublicID != "" {
 		cloudinaryService, err := models.NewCloudinaryService()
 		if err == nil {
 			if err := cloudinaryService.DeleteImage(ctx, cloudinaryPublicID); err != nil {
-				log.Printf("Warning: Failed to delete image from Cloudinary: %v", err)
+				log.Printf("WARNING: Failed to delete image from Cloudinary: %v", err)
+			} else {
+				log.Printf("SUCCESS: Image deleted from Cloudinary - ID: %s", cloudinaryPublicID)
 			}
+		} else {
+			log.Printf("WARNING: Could not initialize Cloudinary service: %v", err)
 		}
 	}
 
 	invalidateProductCache()
 
-	c.JSON(200, gin.H{"success": true, "message": "Product deleted permanently"})
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Product deleted permanently",
+	})
 }
