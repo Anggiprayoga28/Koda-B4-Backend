@@ -594,7 +594,7 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 }
 
 // @Summary Update product
-// @Description Update product (Admin)
+// @Description Update product with Cloudinary upload (Admin)
 // @Tags Admin - Products
 // @Security BearerAuth
 // @Accept multipart/form-data
@@ -615,6 +615,15 @@ func (ctrl *ProductController) CreateProduct(c *gin.Context) {
 func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	ctx := context.Background()
+
+	if models.DB == nil {
+		log.Printf("Database connection is nil, attempting to reinitialize")
+		models.InitDB()
+		if models.DB == nil {
+			c.JSON(500, gin.H{"success": false, "message": "Database connection failed"})
+			return
+		}
+	}
 
 	var hasCloudinaryColumn bool
 	err := models.DB.QueryRow(ctx,
@@ -647,6 +656,8 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		return
 	}
 
+	log.Printf("Found existing product: ID=%d, Name=%s", id, existingProduct.Name)
+
 	name := strings.TrimSpace(c.DefaultPostForm("name", existingProduct.Name))
 	description := strings.TrimSpace(c.DefaultPostForm("description", existingProduct.Description))
 	categoryID, _ := strconv.Atoi(c.DefaultPostForm("category_id", strconv.Itoa(existingProduct.CategoryID)))
@@ -656,6 +667,8 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 	isFavorite, _ := strconv.ParseBool(c.DefaultPostForm("is_favorite", strconv.FormatBool(existingProduct.IsFavorite)))
 	isBuy1Get1, _ := strconv.ParseBool(c.DefaultPostForm("is_buy1get1", strconv.FormatBool(existingProduct.IsBuy1Get1)))
 	isActive, _ := strconv.ParseBool(c.DefaultPostForm("is_active", strconv.FormatBool(existingProduct.IsActive)))
+
+	log.Printf("Update params - Name: %s, Price: %d, Stock: %d", name, price, stock)
 
 	if name != existingProduct.Name && len(name) < 3 {
 		c.JSON(400, gin.H{"success": false, "message": "Product name must be at least 3 characters"})
@@ -717,25 +730,64 @@ func (ctrl *ProductController) UpdateProduct(c *gin.Context) {
 		}
 	}
 
+	var cmdTag interface{}
+
 	if hasCloudinaryColumn {
-		_, err = models.DB.Exec(ctx,
+		log.Printf("Executing UPDATE with cloudinary_id for product ID %d", id)
+		cmdTag, err = models.DB.Exec(ctx,
 			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, cloudinary_id=$7, is_flash_sale=$8, is_favorite=$9, is_buy1get1=$10, is_active=$11, updated_at=$12 WHERE id=$13",
 			name, description, categoryID, price, stock, imageURL, cloudinaryPublicID, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
 	} else {
-		_, err = models.DB.Exec(ctx,
+		log.Printf("Executing UPDATE without cloudinary_id for product ID %d", id)
+		cmdTag, err = models.DB.Exec(ctx,
 			"UPDATE products SET name=$1, description=$2, category_id=$3, price=$4, stock=$5, image_url=$6, is_flash_sale=$7, is_favorite=$8, is_buy1get1=$9, is_active=$10, updated_at=$11 WHERE id=$12",
 			name, description, categoryID, price, stock, imageURL, isFlashSale, isFavorite, isBuy1Get1, isActive, time.Now(), id)
 	}
 
 	if err != nil {
 		log.Printf("Error updating product: %v", err)
-		c.JSON(500, gin.H{"success": false, "message": "Failed to update product"})
+		c.JSON(500, gin.H{"success": false, "message": "Failed to update product: " + err.Error()})
 		return
+	}
+
+	rowsAffected := cmdTag.(interface{ RowsAffected() int64 }).RowsAffected()
+	log.Printf("UPDATE executed, rows affected: %d", rowsAffected)
+
+	if rowsAffected == 0 {
+		log.Printf("WARNING: No rows were updated for product ID %d", id)
+		c.JSON(404, gin.H{"success": false, "message": "Product not found or no changes made"})
+		return
+	}
+
+	var verifyName string
+	var verifyPrice int
+	err = models.DB.QueryRow(ctx, "SELECT name, price FROM products WHERE id=$1", id).Scan(&verifyName, &verifyPrice)
+	if err != nil {
+		log.Printf("WARNING: Product updated but verification failed: %v", err)
+	} else {
+		log.Printf("Verification - ID: %d, Name: %s (expected: %s), Price: %d (expected: %d)",
+			id, verifyName, name, verifyPrice, price)
+
+		if verifyName != name {
+			log.Printf("ERROR: Database value mismatch - Expected name: %s, Got: %s", name, verifyName)
+		}
+		if verifyPrice != price {
+			log.Printf("ERROR: Database price mismatch - Expected: %d, Got: %d", price, verifyPrice)
+		}
 	}
 
 	invalidateProductCache()
 
-	c.JSON(200, gin.H{"success": true, "message": "Product updated successfully"})
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Product updated successfully",
+		"data": gin.H{
+			"id":            id,
+			"name":          name,
+			"price":         price,
+			"rows_affected": rowsAffected,
+		},
+	})
 }
 
 // @Summary Delete product
