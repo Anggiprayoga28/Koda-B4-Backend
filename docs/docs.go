@@ -31,7 +31,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "categories"
+                    "Admin - Categories"
                 ],
                 "summary": "Create new category",
                 "parameters": [
@@ -65,7 +65,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "categories"
+                    "Admin - Categories"
                 ],
                 "summary": "Delete category",
                 "parameters": [
@@ -100,7 +100,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "categories"
+                    "Admin - Categories"
                 ],
                 "summary": "Update category",
                 "parameters": [
@@ -305,7 +305,8 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Product stock",
                         "name": "stock",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "boolean",
@@ -458,101 +459,6 @@ const docTemplate = `{
                         "type": "file",
                         "description": "Product image",
                         "name": "image",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/profile": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get current admin profile",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin - Profile"
-                ],
-                "summary": "Get admin profile",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update admin profile information",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin - Profile"
-                ],
-                "summary": "Update admin profile",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Full Name",
-                        "name": "full_name",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Phone",
-                        "name": "phone",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Address",
-                        "name": "address",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "file",
-                        "description": "Profile photo",
-                        "name": "photo",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Old Password",
-                        "name": "old_password",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "New Password",
-                        "name": "new_password",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Confirm New Password",
-                        "name": "confirm_password",
                         "in": "formData"
                     }
                 ],
@@ -882,101 +788,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/profile": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get current user profile",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "Get user profile",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update user profile information and change password",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Profile"
-                ],
-                "summary": "Update profile",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Full Name",
-                        "name": "full_name",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Phone",
-                        "name": "phone",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Address",
-                        "name": "address",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "file",
-                        "description": "Profile photo",
-                        "name": "photo",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Old Password",
-                        "name": "old_password",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "New Password",
-                        "name": "new_password",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Confirm New Password",
-                        "name": "confirm_password",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/register": {
             "post": {
                 "description": "Register a new customer account",
@@ -1206,7 +1017,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "categories"
+                    "Categories"
                 ],
                 "summary": "Get category by ID",
                 "parameters": [
@@ -1419,7 +1230,7 @@ const docTemplate = `{
         },
         "/products/favorite": {
             "get": {
-                "description": "Get list of favorite products (limited to 4)",
+                "description": "Get list of favorite products",
                 "produces": [
                     "application/json"
                 ],
@@ -1529,7 +1340,7 @@ const docTemplate = `{
         },
         "/products/{id}": {
             "get": {
-                "description": "Get product details",
+                "description": "Get product details by ID",
                 "produces": [
                     "application/json"
                 ],
@@ -1552,12 +1363,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
                     }
                 }
             }
@@ -1579,6 +1384,101 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get current user profile",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Get user profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update user profile information and change password",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Update profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Full Name",
+                        "name": "full_name",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Phone",
+                        "name": "phone",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Address",
+                        "name": "address",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Profile photo",
+                        "name": "photo",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Old Password",
+                        "name": "old_password",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "New Password",
+                        "name": "new_password",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Confirm New Password",
+                        "name": "confirm_password",
+                        "in": "formData"
                     }
                 ],
                 "responses": {

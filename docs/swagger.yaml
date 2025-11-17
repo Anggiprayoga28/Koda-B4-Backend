@@ -100,7 +100,7 @@ paths:
       - BearerAuth: []
       summary: Create new category
       tags:
-      - categories
+      - Admin - Categories
   /admin/categories/{id}:
     delete:
       description: Delete a category (Admin only)
@@ -121,7 +121,7 @@ paths:
       - BearerAuth: []
       summary: Delete category
       tags:
-      - categories
+      - Admin - Categories
     patch:
       consumes:
       - multipart/form-data
@@ -148,7 +148,7 @@ paths:
       - BearerAuth: []
       summary: Update category
       tags:
-      - categories
+      - Admin - Categories
   /admin/orders:
     get:
       description: Get paginated orders (Admin)
@@ -257,6 +257,7 @@ paths:
       - description: Product stock
         in: formData
         name: stock
+        required: true
         type: integer
       - description: Is flash sale
         in: formData
@@ -369,66 +370,6 @@ paths:
       summary: Update product
       tags:
       - Admin - Products
-  /admin/profile:
-    get:
-      description: Get current admin profile
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Get admin profile
-      tags:
-      - Admin - Profile
-    patch:
-      consumes:
-      - multipart/form-data
-      description: Update admin profile information
-      parameters:
-      - description: Full Name
-        in: formData
-        name: full_name
-        type: string
-      - description: Phone
-        in: formData
-        name: phone
-        type: string
-      - description: Address
-        in: formData
-        name: address
-        type: string
-      - description: Profile photo
-        in: formData
-        name: photo
-        type: file
-      - description: Old Password
-        in: formData
-        name: old_password
-        type: string
-      - description: New Password
-        in: formData
-        name: new_password
-        type: string
-      - description: Confirm New Password
-        in: formData
-        name: confirm_password
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Update admin profile
-      tags:
-      - Admin - Profile
   /admin/users:
     get:
       description: Get users
@@ -633,66 +574,6 @@ paths:
       summary: User login
       tags:
       - Authentication
-  /auth/profile:
-    get:
-      description: Get current user profile
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Get user profile
-      tags:
-      - Profile
-    patch:
-      consumes:
-      - multipart/form-data
-      description: Update user profile information and change password
-      parameters:
-      - description: Full Name
-        in: formData
-        name: full_name
-        type: string
-      - description: Phone
-        in: formData
-        name: phone
-        type: string
-      - description: Address
-        in: formData
-        name: address
-        type: string
-      - description: Profile photo
-        in: formData
-        name: photo
-        type: file
-      - description: Old Password
-        in: formData
-        name: old_password
-        type: string
-      - description: New Password
-        in: formData
-        name: new_password
-        type: string
-      - description: Confirm New Password
-        in: formData
-        name: confirm_password
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-      security:
-      - BearerAuth: []
-      summary: Update profile
-      tags:
-      - Profile
   /auth/register:
     post:
       consumes:
@@ -861,7 +742,7 @@ paths:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get category by ID
       tags:
-      - categories
+      - Categories
   /history:
     get:
       description: Get paginated order history
@@ -981,7 +862,7 @@ paths:
       - Products
   /products/{id}:
     get:
-      description: Get product details
+      description: Get product details by ID
       parameters:
       - description: Product ID
         in: path
@@ -995,10 +876,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Response'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
       summary: Get product by ID
       tags:
       - Products
@@ -1024,7 +901,7 @@ paths:
       - Products
   /products/favorite:
     get:
-      description: Get list of favorite products (limited to 4)
+      description: Get list of favorite products
       produces:
       - application/json
       responses:
@@ -1097,6 +974,66 @@ paths:
       summary: Filter products
       tags:
       - Products
+  /profile:
+    get:
+      description: Get current user profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - Profile
+    patch:
+      consumes:
+      - multipart/form-data
+      description: Update user profile information and change password
+      parameters:
+      - description: Full Name
+        in: formData
+        name: full_name
+        type: string
+      - description: Phone
+        in: formData
+        name: phone
+        type: string
+      - description: Address
+        in: formData
+        name: address
+        type: string
+      - description: Profile photo
+        in: formData
+        name: photo
+        type: file
+      - description: Old Password
+        in: formData
+        name: old_password
+        type: string
+      - description: New Password
+        in: formData
+        name: new_password
+        type: string
+      - description: Confirm New Password
+        in: formData
+        name: confirm_password
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - BearerAuth: []
+      summary: Update profile
+      tags:
+      - Profile
   /transactions/checkout:
     post:
       consumes:
