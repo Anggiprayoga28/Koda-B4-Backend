@@ -1,5 +1,4 @@
-name: Build and Deploy Harlan Holden Coffee
-run-name: Building and Deploying Harlan Holden Coffee
+name: Build and Push
 on:
   push:
     tags:
@@ -8,47 +7,31 @@ on:
 permissions:
   contents: read
   packages: write
-            
+
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Set up Docker Buildx
+      - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Build and push Docker image
+      - name: Get repo name
+        id: repo
+        run: echo "name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: .  
+          context: .
           push: true
-          tags: |
-            ghcr.io/anggiprayoga28/harlan-holden:latest
-            ghcr.io/anggiprayoga28/harlan-holden:${{ github.ref_name }}
-
-  deploy:
-    needs: build-and-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Execute remote SSH commands using SSH key
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.KEY }}
-          port: ${{ secrets.PORT }}
-          script: |
-            docker pull ghcr.io/anggiprayoga28/harlan-holden:latest
-            cd ~/server
-            docker compose pull
-            docker compose up app -d
-            docker system prune -a --volumes
+          tags: ghcr.io/${{ steps.repo.outputs.name }}:latest
+          build-args: VITE_BASE_URL=${{ secrets.VITE_BASE_URL }}
