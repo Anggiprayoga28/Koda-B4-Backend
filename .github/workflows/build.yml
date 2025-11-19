@@ -1,9 +1,13 @@
-name: Build and Release Coffee Shop
-run-name: Building and Releasing Coffee Shop
+name: Build and Release Harlan Holden Coffee
+run-name: Building and Releasing Harlan Holden Coffee
 on:
   push:
     tags:
       - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write
             
 jobs:
   build-and-release:
@@ -26,5 +30,5 @@ jobs:
             context: .  
             push: true
             tags: |
-                ghcr.io/anggiprayoga28/coffeeshop:latest
-                ghcr.io/anggiprayoga28/coffeeshop:${{ github.ref_name }}
+                ghcr.io/anggiprayoga28/harlan-holden:latest
+                ghcr.io/anggiprayoga28/harlan-holden:${{ github.ref_name }}
