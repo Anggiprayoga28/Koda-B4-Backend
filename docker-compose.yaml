@@ -4,6 +4,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: coffee-shop-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: anggi
       POSTGRES_PASSWORD: password123
@@ -12,18 +13,32 @@ services:
       - "5454:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anggi -d coffee_shop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: coffee-shop-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: coffee-shop-api
+    restart: unless-stopped
     ports:
       - "8082:8080"
     environment:
@@ -37,9 +52,14 @@ services:
       REDIS_ADDR: redis:6379
       JWT_SECRET: secret-key-change-this
       JWT_EXPIRY: 24h
+      GIN_MODE: release
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/root/uploads
 
 volumes:
   postgres_data:
