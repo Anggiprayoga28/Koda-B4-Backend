@@ -46,4 +46,8 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
-          script: docker pull ghcr.io/anggiprayoga28/harlan-holden:latest
+          script: |
+           docker pull ghcr.io/anggiprayoga28/harlan-holden:latest 
+           cd ~/server && docker compose pull \
+           && docker compose up app -d \
+           && docker system prune -a --volumes
