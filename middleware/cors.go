@@ -10,11 +10,16 @@ import (
 func CORSMiddleware() gin.HandlerFunc {
 	originEnv := os.Getenv("ORIGIN_URL")
 
+	allowedOrigins := []string{
+		"http://localhost:5173",
+	}
+
+	if originEnv != "" {
+		allowedOrigins = append(allowedOrigins, originEnv)
+	}
+
 	return cors.New(cors.Config{
-		AllowOrigins: []string{
-			originEnv,
-			"http://localhost:5173",
-		},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
