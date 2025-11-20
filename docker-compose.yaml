@@ -40,9 +40,9 @@ services:
     container_name: coffee-shop-api
     restart: unless-stopped
     ports:
-      - "8082:8080"
+      - "8083:8080"
     environment:
-      PORT: 8080
+      PORT: 8083
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: anggi
