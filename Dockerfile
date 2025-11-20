@@ -11,5 +11,5 @@ FROM alpine
 WORKDIR /app
 COPY --from=build /app/main .
 RUN mkdir uploads
-EXPOSE 8080
+EXPOSE 8083
 CMD ["./main"]
