@@ -348,21 +348,7 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 
 	otp := generateOTP()
 
-	if models.RedisClient != nil {
-		ctx := context.Background()
-		redisKey := fmt.Sprintf("otp:%s", email)
-
-		err = models.RedisClient.Set(ctx, redisKey, otp, 5*time.Minute).Err()
-		if err != nil {
-			c.JSON(500, gin.H{
-				"success": false,
-				"message": "Failed to generate OTP",
-			})
-			return
-		}
-
-		fmt.Printf("[OTP Generated] Email: %s, OTP: %s, Expires: 5 minutes\n", email, otp)
-	} else {
+	if models.RedisClient == nil {
 		c.JSON(500, gin.H{
 			"success": false,
 			"message": "Redis not available",
@@ -370,11 +356,63 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+	redisKey := fmt.Sprintf("otp:%s", email)
+
+	err = models.RedisClient.Set(ctx, redisKey, otp, 5*time.Minute).Err()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": "Failed to generate OTP",
+		})
+		return
+	}
+
+	emailService, err := models.NewEmailService()
+	if err != nil {
+		fmt.Printf("[OTP Generated - SMTP Not Configured]\n")
+		fmt.Printf("Email: %s\n", email)
+		fmt.Printf("OTP: %s\n", otp)
+		fmt.Printf("Expires: 5 minutes\n")
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "OTP generated successfully (SMTP not configured)",
+			"data": gin.H{
+				"otp":       otp,
+				"expiresIn": "5 minutes",
+			},
+		})
+		return
+	}
+
+	err = emailService.SendOTPEmail(email, otp)
+	if err != nil {
+		fmt.Printf("[OTP Email Failed - Fallback to Console]\n")
+		fmt.Printf("Email: %s\n", email)
+		fmt.Printf("OTP: %s\n", otp)
+		fmt.Printf("Error: %v\n", err)
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "OTP generated (email sending failed, check console)",
+			"data": gin.H{
+				"otp":       otp,
+				"expiresIn": "5 minutes",
+			},
+		})
+		return
+	}
+
+	fmt.Printf("[OTP Sent Successfully]\n")
+	fmt.Printf("Email: %s\n", email)
+	fmt.Printf("OTP sent via SMTP\n")
+	fmt.Printf("Expires: 5 minutes\n")
+
 	c.JSON(200, gin.H{
 		"success": true,
-		"message": "OTP sent successfully",
+		"message": "OTP has been sent to your email",
 		"data": gin.H{
-			"otp":       otp,
 			"expiresIn": "5 minutes",
 		},
 	})
@@ -492,7 +530,10 @@ func (ctrl *AuthController) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("[Password Reset] Email: %s, User ID: %d\n", email, userID)
+	fmt.Printf("[Password Reset Successful]\n")
+	fmt.Printf("Email: %s\n", email)
+	fmt.Printf("User ID: %d\n", userID)
+	fmt.Printf("Time: %s\n", time.Now().Format("2006-01-02 15:04:05"))
 
 	c.JSON(200, gin.H{
 		"success": true,
