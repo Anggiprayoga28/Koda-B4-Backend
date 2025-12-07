@@ -1,3 +1,4 @@
+-- Active: 1763533642135@@165.22.110.38@5432@anggi-coffeshop
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(30) UNIQUE,
@@ -316,3 +317,26 @@ ALTER TABLE orders
 ADD CONSTRAINT fk_orders_status 
 FOREIGN KEY (status_id) REFERENCES order_status(id);
 
+-- Add cloudinary_id column to products table for Cloudinary integration
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS cloudinary_id VARCHAR(255);
+
+-- Add index for better performance
+CREATE INDEX IF NOT EXISTS idx_products_cloudinary_id ON products(cloudinary_id);
+
+-- Create comment for documentation
+COMMENT ON COLUMN products.cloudinary_id IS 'Cloudinary public ID for image management';
+
+ALTER TABLE user_profiles 
+ADD COLUMN cloudinary_public_id VARCHAR(255);
+
+CREATE INDEX idx_user_profiles_cloudinary_public_id 
+ON user_profiles(cloudinary_public_id);
+
+-- Add UNIQUE constraint on user_id
+ALTER TABLE user_profiles 
+ADD CONSTRAINT user_profiles_user_id_key UNIQUE (user_id);
+
+-- Add comment
+COMMENT ON CONSTRAINT user_profiles_user_id_key ON user_profiles 
+IS 'Ensures one profile per user for UPSERT operations';
