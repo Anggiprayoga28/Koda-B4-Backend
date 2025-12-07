@@ -63,12 +63,12 @@ func (ctrl *UserController) generateLinks(c *gin.Context, page, limit, totalPage
 
 	if page > 1 {
 		prevURL := makeURL(page - 1)
-		links.Prev = &prevURL
+		links.Prev = prevURL
 	}
 
 	if page < totalPages {
 		nextURL := makeURL(page + 1)
-		links.Next = &nextURL
+		links.Next = nextURL
 	}
 
 	return links
