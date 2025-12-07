@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -16,25 +15,61 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/matthewhartstonge/argon2"
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthController struct{}
 
 func hashPassword(password string) (string, error) {
-	argon := argon2.DefaultConfig()
-	encoded, err := argon.HashEncoded([]byte(password))
-	return string(encoded), err
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hash), err
 }
 
-func verifyPassword(hash, password string) bool {
-	ok, _ := argon2.VerifyEncoded([]byte(password), []byte(hash))
-	return ok
+func verifyPassword(hashed, plain string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hashed), []byte(plain)) == nil
 }
 
-func generateToken(userID int, email, role string) (string, error) {
-	secret := getEnv("JWT_SECRET", "secret")
-	expiry, _ := time.ParseDuration(getEnv("JWT_EXPIRY", "24h"))
+func generateOTP(length int) (string, error) {
+	const digits = "0123456789"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i := range b {
+		b[i] = digits[int(b[i])%len(digits)]
+	}
+	return string(b), nil
+}
+
+func isValidEmail(email string) bool {
+	re := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return re.MatchString(email)
+}
+
+func isValidPassword(password string) bool {
+	return len(password) >= 6
+}
+
+func isValidPhone(phone string) bool {
+	re := regexp.MustCompile(`^[0-9+\-]{8,20}$`)
+	return re.MatchString(phone)
+}
+
+func getJWTSecret() string {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "very-secret-key-change-me"
+	}
+	return secret
+}
+
+func generateToken(userID int, email, role string, expiry time.Duration) (string, error) {
+	secret := getJWTSecret()
+
+	if expiry <= 0 {
+		expiry = time.Hour
+	}
 
 	claims := jwt.MapClaims{
 		"user_id": userID,
@@ -49,321 +84,352 @@ func generateToken(userID int, email, role string) (string, error) {
 }
 
 func uploadFile(c *gin.Context, file *multipart.FileHeader, subDir string) (string, error) {
-	allowedExts := []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
-	if file.Size > 5*1024*1024 {
-		return "", errors.New("file too large (max 5MB)")
+	if file == nil {
+		return "", errors.New("no file provided")
 	}
 
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	allowed := false
-	for _, e := range allowedExts {
-		if ext == e {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		return "", errors.New("invalid file type")
-	}
-
-	uploadDir := filepath.Join(getEnv("UPLOAD_DIR", "./uploads"), subDir)
-	os.MkdirAll(uploadDir, os.ModePerm)
-
-	filename := fmt.Sprintf("%d_%s", time.Now().Unix(), strings.ReplaceAll(file.Filename, " ", "_"))
-	fullPath := filepath.Join(uploadDir, filename)
-
-	if err := c.SaveUploadedFile(file, fullPath); err != nil {
+	uploadDir := filepath.Join("uploads", subDir)
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return "", err
 	}
 
-	return filepath.Join(subDir, filename), nil
+	filename := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(file.Filename))
+	path := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(file, path); err != nil {
+		return "", err
+	}
+
+	return "/" + path, nil
 }
 
 func deleteFile(path string) {
-	if path != "" {
-		os.Remove(filepath.Join(getEnv("UPLOAD_DIR", "./uploads"), path))
+	if path == "" {
+		return
 	}
-}
-
-func getEnv(key, def string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return def
-}
-
-func isValidEmail(email string) bool {
-	pattern := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
-	match, _ := regexp.MatchString(pattern, email)
-	return match
-}
-
-func isValidPassword(password string) bool {
-	return len(password) >= 6
-}
-
-func isValidPhone(phone string) bool {
-	if phone == "" {
-		return true
-	}
-	pattern := `^[\d+\-\s()]+$`
-	match, _ := regexp.MatchString(pattern, phone)
-	return match && len(phone) >= 10
-}
-
-func generateOTP() string {
-	otp := ""
-	for i := 0; i < 6; i++ {
-		num, _ := rand.Int(rand.Reader, big.NewInt(10))
-		otp += num.String()
-	}
-	return otp
+	_ = os.Remove(strings.TrimPrefix(path, "/"))
 }
 
 // Register godoc
-// @Summary Register new user
-// @Description Register a new customer account
-// @Tags Authentication
-// @Accept multipart/form-data
+// @Summary Register user
+// @Tags Auth
+// @Accept json
 // @Produce json
-// @Param email formData string true "Email"
-// @Param password formData string true "Password"
-// @Param full_name formData string true "Full Name"
-// @Param phone formData string false "Phone"
-// @Param role formData string false "Role"
+// @Param body body models.RegisterRequest true "Register payload"
 // @Success 201 {object} models.Response
 // @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /auth/register [post]
 func (ctrl *AuthController) Register(c *gin.Context) {
-	email := strings.TrimSpace(c.PostForm("email"))
-	password := c.PostForm("password")
-	fullName := strings.TrimSpace(c.PostForm("full_name"))
-	phone := strings.TrimSpace(c.PostForm("phone"))
-	role := c.DefaultPostForm("role", "customer")
-
-	if email == "" || password == "" || fullName == "" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Email, password, and full_name are required",
+	var req models.RegisterRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid request payload",
+			Error:   err.Error(),
 		})
 		return
 	}
 
+	email := strings.TrimSpace(req.Email)
+	password := req.Password
+	fullName := strings.TrimSpace(req.FullName)
+	phone := strings.TrimSpace(req.Phone)
+	role := strings.TrimSpace(req.Role)
+	if role == "" {
+		role = "customer"
+	}
+
 	if !isValidEmail(email) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Invalid email format",
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid email format",
 		})
 		return
 	}
 
 	if !isValidPassword(password) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Password must be at least 6 characters",
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Password must be at least 6 characters",
 		})
 		return
 	}
 
 	if len(fullName) < 3 {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Full name must be at least 3 characters",
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Full name must be at least 3 characters",
 		})
 		return
 	}
 
-	if !isValidPhone(phone) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Invalid phone number",
+	if phone != "" && !isValidPhone(phone) {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid phone number",
 		})
 		return
 	}
 
 	if role != "customer" && role != "admin" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Role must be 'customer' or 'admin'",
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Role must be 'customer' or 'admin'",
 		})
 		return
 	}
 
 	var exists int
-	models.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", email).Scan(&exists)
+	if err := models.DB.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM users WHERE email=$1", email,
+	).Scan(&exists); err != nil {
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Failed to check existing user",
+		})
+		return
+	}
 	if exists > 0 {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Email already exists",
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Email already exists",
 		})
 		return
 	}
 
-	hash, _ := hashPassword(password)
+	hashed, _ := hashPassword(password)
 	now := time.Now()
 
 	var userID int
-	err := models.DB.QueryRow(context.Background(),
-		"INSERT INTO users (email, password, role, created_at, updated_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
-		email, hash, role, now, now).Scan(&userID)
+	err := models.DB.QueryRow(
+		context.Background(),
+		`INSERT INTO users (email, password, role, created_at, updated_at) 
+		 VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+		email, hashed, role, now, now,
+	).Scan(&userID)
 
 	if err != nil {
-		c.JSON(500, gin.H{
-			"success": false,
-			"message": "Registration failed",
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Registration failed",
+			Error:   err.Error(),
 		})
 		return
 	}
 
-	models.DB.Exec(context.Background(),
-		"INSERT INTO user_profiles (user_id, full_name, phone, created_at, updated_at) VALUES ($1,$2,$3,$4,$5)",
-		userID, fullName, phone, now, now)
+	_, err = models.DB.Exec(
+		context.Background(),
+		`INSERT INTO user_profiles (user_id, full_name, phone, created_at, updated_at) 
+		 VALUES ($1, $2, $3, $4, $5)`,
+		userID, fullName, phone, now, now,
+	)
 
-	token, _ := generateToken(userID, email, role)
-
-	c.JSON(201, gin.H{
-		"success": true,
-		"message": "Registration successful",
-		"data": gin.H{
-			"token": token,
-			"user": gin.H{
-				"id":       userID,
-				"email":    email,
-				"role":     role,
-				"fullName": fullName,
-				"phone":    phone,
+	if err != nil {
+		c.JSON(201, models.Response{
+			Success: true,
+			Message: "User registered successfully (profile pending)",
+			Data: gin.H{
+				"id":    userID,
+				"email": email,
+				"role":  role,
 			},
+		})
+		return
+	}
+
+	c.JSON(201, models.Response{
+		Success: true,
+		Message: "User registered successfully",
+		Data: gin.H{
+			"id":    userID,
+			"email": email,
+			"role":  role,
 		},
 	})
 }
 
 // Login godoc
-// @Summary User login
-// @Description Login with email and password
-// @Tags Authentication
-// @Accept multipart/form-data
+// @Summary Login user
+// @Tags Auth
+// @Accept json
 // @Produce json
-// @Param email formData string true "Email"
-// @Param password formData string true "Password"
+// @Param body body models.LoginRequest true "Login payload"
 // @Success 200 {object} models.Response
+// @Failure 400 {object} models.ErrorResponse
 // @Failure 401 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /auth/login [post]
 func (ctrl *AuthController) Login(c *gin.Context) {
-	email := strings.TrimSpace(c.PostForm("email"))
-	password := c.PostForm("password")
-
-	if email == "" || password == "" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Email and password are required",
+	var req models.LoginRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid request payload",
+			Error:   err.Error(),
 		})
 		return
 	}
+
+	email := strings.TrimSpace(req.Email)
+	password := req.Password
 
 	if !isValidEmail(email) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Invalid email format",
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid email format",
 		})
 		return
 	}
 
-	var id int
-	var emailDB, passwordDB, role string
-	err := models.DB.QueryRow(context.Background(),
-		"SELECT id, email, password, role FROM users WHERE email=$1", email).Scan(&id, &emailDB, &passwordDB, &role)
-
-	if err != nil || !verifyPassword(passwordDB, password) {
-		c.JSON(401, gin.H{
-			"success": false,
-			"message": "Invalid credentials",
+	if password == "" {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Password is required",
 		})
 		return
 	}
 
-	token, _ := generateToken(id, emailDB, role)
+	var (
+		id   int
+		hash string
+		role string
+	)
 
-	var fullName, phone, address, photoURL string
-	models.DB.QueryRow(context.Background(),
-		"SELECT COALESCE(full_name,''), COALESCE(phone,''), COALESCE(address,''), COALESCE(photo_url,'') FROM user_profiles WHERE user_id=$1",
-		id).Scan(&fullName, &phone, &address, &photoURL)
+	err := models.DB.QueryRow(
+		context.Background(),
+		"SELECT id, password, role FROM users WHERE email=$1",
+		email,
+	).Scan(&id, &hash, &role)
 
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "Login successful",
-		"data": gin.H{
+	if err != nil {
+		c.JSON(401, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid email or password",
+		})
+		return
+	}
+
+	if !verifyPassword(hash, password) {
+		c.JSON(401, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid email or password",
+		})
+		return
+	}
+
+	var (
+		fullName string
+		phone    string
+		address  string
+		photoURL string
+	)
+
+	profileErr := models.DB.QueryRow(
+		context.Background(),
+		`SELECT COALESCE(up.full_name, ''), COALESCE(up.phone, ''), 
+		        COALESCE(up.address, ''), COALESCE(up.photo_url, '')
+		 FROM users u
+		 LEFT JOIN user_profiles up ON u.id = up.user_id
+		 WHERE u.id = $1`,
+		id,
+	).Scan(&fullName, &phone, &address, &photoURL)
+
+	if profileErr != nil {
+		fullName = ""
+		phone = ""
+		address = ""
+		photoURL = ""
+	}
+
+	token, err := generateToken(id, email, role, time.Hour)
+	if err != nil {
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Failed to generate token",
+		})
+		return
+	}
+
+	c.JSON(200, models.Response{
+		Success: true,
+		Message: "Login successful",
+		Data: gin.H{
 			"token": token,
 			"user": gin.H{
-				"id":       id,
-				"email":    emailDB,
-				"role":     role,
-				"fullName": fullName,
-				"phone":    phone,
-				"address":  address,
-				"photoUrl": photoURL,
+				"id":        id,
+				"email":     email,
+				"role":      role,
+				"full_name": fullName,
+				"phone":     phone,
+				"address":   address,
+				"photo_url": photoURL,
 			},
 		},
 	})
 }
 
 // ForgotPassword godoc
-// @Summary Request password reset
-// @Description Send OTP
-// @Tags Authentication
-// @Accept multipart/form-data
+// @Summary Request OTP for password reset
+// @Tags Auth
+// @Accept json
 // @Produce json
-// @Param email formData string true "Email"
+// @Param email body struct{Email string `json:"email"`} true "Email"
 // @Success 200 {object} models.Response
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /auth/forgot-password [post]
 func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
-	email := strings.TrimSpace(c.PostForm("email"))
-
-	if email == "" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Email is required",
+	var payload struct {
+		Email string `json:"email" form:"email" binding:"required,email"`
+	}
+	if err := c.ShouldBind(&payload); err != nil {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid email",
+			Error:   err.Error(),
 		})
 		return
 	}
 
-	if !isValidEmail(email) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Invalid email format",
-		})
-		return
-	}
+	email := strings.TrimSpace(payload.Email)
 
 	var userID int
 	err := models.DB.QueryRow(context.Background(),
-		"SELECT id FROM users WHERE email=$1", email).Scan(&userID)
-
+		"SELECT id FROM users WHERE email=$1",
+		email,
+	).Scan(&userID)
 	if err != nil {
-		c.JSON(404, gin.H{
-			"success": false,
-			"message": "Email not found",
+		c.JSON(200, models.Response{
+			Success: true,
+			Message: "If that email exists, an OTP has been sent",
 		})
 		return
 	}
 
-	otp := generateOTP()
+	otp, err := generateOTP(6)
+	if err != nil {
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Failed to generate OTP",
+		})
+		return
+	}
 
 	if models.RedisClient == nil {
-		c.JSON(500, gin.H{
-			"success": false,
-			"message": "Redis not available",
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "OTP service unavailable",
 		})
 		return
 	}
 
 	ctx := context.Background()
-	redisKey := fmt.Sprintf("otp:%s", email)
-
-	err = models.RedisClient.Set(ctx, redisKey, otp, 5*time.Minute).Err()
-	if err != nil {
-		c.JSON(500, gin.H{
-			"success": false,
-			"message": "Failed to generate OTP",
+	key := fmt.Sprintf("otp:%s", strings.ToLower(email))
+	if err := models.RedisClient.Set(ctx, key, otp, 5*time.Minute).Err(); err != nil {
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Failed to store OTP",
 		})
 		return
 	}
@@ -371,172 +437,100 @@ func (ctrl *AuthController) ForgotPassword(c *gin.Context) {
 	emailService, err := models.NewEmailService()
 	if err != nil {
 		fmt.Printf("[OTP Generated - SMTP Not Configured]\n")
-		fmt.Printf("Email: %s\n", email)
-		fmt.Printf("OTP: %s\n", otp)
-		fmt.Printf("Expires: 5 minutes\n")
-
-		c.JSON(200, gin.H{
-			"success": true,
-			"message": "OTP generated successfully (SMTP not configured)",
-			"data": gin.H{
-				"otp":       otp,
-				"expiresIn": "5 minutes",
-			},
-		})
-		return
+		fmt.Printf("Email: %s\nOTP: %s\nExpires: 5 minutes\n", email, otp)
+	} else {
+		_ = emailService.SendOTPEmail(email, otp)
 	}
 
-	err = emailService.SendOTPEmail(email, otp)
-	if err != nil {
-		fmt.Printf("[OTP Email Failed - Fallback to Console]\n")
-		fmt.Printf("Email: %s\n", email)
-		fmt.Printf("OTP: %s\n", otp)
-		fmt.Printf("Error: %v\n", err)
-
-		c.JSON(200, gin.H{
-			"success": true,
-			"message": "OTP generated (email sending failed, check console)",
-			"data": gin.H{
-				"otp":       otp,
-				"expiresIn": "5 minutes",
-			},
-		})
-		return
-	}
-
-	fmt.Printf("[OTP Sent Successfully]\n")
-	fmt.Printf("Email: %s\n", email)
-	fmt.Printf("OTP sent via SMTP\n")
-	fmt.Printf("Expires: 5 minutes\n")
-
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "OTP has been sent to your email",
-		"data": gin.H{
-			"expiresIn": "5 minutes",
-		},
+	c.JSON(200, models.Response{
+		Success: true,
+		Message: "If that email exists, an OTP has been sent",
 	})
 }
 
 // VerifyOTP godoc
 // @Summary Verify OTP and reset password
-// @Description Verify OTP code and immediately reset password
-// @Tags Authentication
-// @Accept multipart/form-data
+// @Tags Auth
+// @Accept json
 // @Produce json
-// @Param email formData string true "Email"
-// @Param otp formData string true "OTP Code"
-// @Param new_password formData string true "New Password"
-// @Param confirm_password formData string true "Confirm Password"
+// @Param body body struct{
+// @Param body body struct{Email string `json:"email"`; OTP string `json:"otp"`; NewPassword string `json:"new_password"`} true "Verify payload"
 // @Success 200 {object} models.Response
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /auth/verify-otp [post]
 func (ctrl *AuthController) VerifyOTP(c *gin.Context) {
-	email := strings.TrimSpace(c.PostForm("email"))
-	otp := strings.TrimSpace(c.PostForm("otp"))
-	newPassword := c.PostForm("new_password")
-	confirmPassword := c.PostForm("confirm_password")
-
-	if email == "" || otp == "" || newPassword == "" || confirmPassword == "" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "All fields are required",
+	var payload struct {
+		Email       string `json:"email" form:"email" binding:"required,email"`
+		OTP         string `json:"otp" form:"otp" binding:"required"`
+		NewPassword string `json:"new_password" form:"new_password" binding:"required,min=6"`
+	}
+	if err := c.ShouldBind(&payload); err != nil {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "Invalid request payload",
+			Error:   err.Error(),
 		})
 		return
 	}
 
-	if !isValidEmail(email) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Invalid email format",
-		})
-		return
-	}
-
-	if len(otp) != 6 {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "OTP must be 6 digits",
-		})
-		return
-	}
-
-	if !isValidPassword(newPassword) {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Password must be at least 6 characters",
-		})
-		return
-	}
-
-	if newPassword != confirmPassword {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Passwords do not match",
-		})
-		return
-	}
+	email := strings.TrimSpace(payload.Email)
+	otp := strings.TrimSpace(payload.OTP)
 
 	if models.RedisClient == nil {
-		c.JSON(500, gin.H{
-			"success": false,
-			"message": "Redis not available",
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "OTP service unavailable",
 		})
 		return
 	}
 
 	ctx := context.Background()
-	redisKey := fmt.Sprintf("otp:%s", email)
+	key := fmt.Sprintf("otp:%s", strings.ToLower(email))
 
-	storedOTP, err := models.RedisClient.Get(ctx, redisKey).Result()
+	stored, err := models.RedisClient.Get(ctx, key).Result()
 	if err != nil {
-		c.JSON(404, gin.H{
-			"success": false,
-			"message": "OTP not found or expired",
+		if errors.Is(err, redis.Nil) {
+			c.JSON(400, models.ErrorResponse{
+				Success: false,
+				Message: "OTP is invalid or expired",
+			})
+			return
+		}
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Failed to verify OTP",
 		})
 		return
 	}
 
-	if storedOTP != otp {
-		c.JSON(400, gin.H{
-			"success": false,
-			"message": "Invalid OTP code",
+	if stored != otp {
+		c.JSON(400, models.ErrorResponse{
+			Success: false,
+			Message: "OTP is invalid or expired",
 		})
 		return
 	}
 
-	models.RedisClient.Del(ctx, redisKey)
+	hashed, _ := hashPassword(payload.NewPassword)
 
-	var userID int
-	err = models.DB.QueryRow(context.Background(),
-		"SELECT id FROM users WHERE email=$1", email).Scan(&userID)
+	_, err = models.DB.Exec(
+		context.Background(),
+		"UPDATE users SET password=$1, updated_at=$2 WHERE email=$3",
+		hashed, time.Now(), email,
+	)
 	if err != nil {
-		c.JSON(404, gin.H{
-			"success": false,
-			"message": "User not found",
+		c.JSON(500, models.ErrorResponse{
+			Success: false,
+			Message: "Failed to reset password",
 		})
 		return
 	}
 
-	newHash, _ := hashPassword(newPassword)
-	_, err = models.DB.Exec(context.Background(),
-		"UPDATE users SET password=$1, updated_at=$2 WHERE id=$3",
-		newHash, time.Now(), userID)
+	_ = models.RedisClient.Del(ctx, key).Err()
 
-	if err != nil {
-		c.JSON(500, gin.H{
-			"success": false,
-			"message": "Failed to reset password",
-		})
-		return
-	}
-
-	fmt.Printf("[Password Reset Successful]\n")
-	fmt.Printf("Email: %s\n", email)
-	fmt.Printf("User ID: %d\n", userID)
-	fmt.Printf("Time: %s\n", time.Now().Format("2006-01-02 15:04:05"))
-
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "Password reset successfully. You can now login with your new password.",
+	c.JSON(200, models.Response{
+		Success: true,
+		Message: "Password reset successfully",
 	})
 }
