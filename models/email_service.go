@@ -55,7 +55,7 @@ func (s *EmailService) SendOTPEmail(toEmail, otp string) error {
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">☕ Harlan Holden Coffee</div>
+            <div class="logo">Harlan Holden Coffee</div>
         </div>
         <h2 style="color: #333;">Password Reset Request</h2>
         <p>Hello,</p>
@@ -113,7 +113,7 @@ func (s *EmailService) SendOrderConfirmationEmail(toEmail, orderNumber string, t
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">☕ Harlan Holden Coffee</div>
+            <div class="logo">Harlan Holden Coffee</div>
         </div>
         <h2 style="color: #333;">Order Confirmation</h2>
         <p>Thank you for your order!</p>
