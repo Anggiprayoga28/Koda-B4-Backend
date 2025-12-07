@@ -3,6 +3,7 @@ package controllers
 import (
 	"coffee-shop/models"
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -23,6 +24,8 @@ type OrderDetailController struct{}
 func (ctrl *OrderDetailController) GetOrderDetail(c *gin.Context) {
 	userID := c.GetInt("user_id")
 	orderID, _ := strconv.Atoi(c.Param("id"))
+	fmt.Println(userID)
+	fmt.Println(orderID)
 
 	if orderID <= 0 {
 		c.JSON(400, gin.H{
