@@ -4,6 +4,7 @@ import (
 	"coffee-shop/models"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,7 +90,6 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 		}
 		items = append(items, i)
 	}
-	rows.Close()
 
 	if len(items) == 0 {
 		c.JSON(400, gin.H{"success": false, "message": "Cart is empty"})
@@ -120,9 +120,16 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 		Address:        strings.TrimSpace(c.PostForm("address")),
 		DeliveryMethod: strings.ToLower(c.DefaultPostForm("delivery_method", "dine_in")),
 	}
-	fmt.Sscanf(c.PostForm("payment_method_id"), "%d", &req.PaymentMethod)
-	if req.PaymentMethod == 0 {
-		req.PaymentMethod = 1
+
+	pmStr := strings.TrimSpace(c.PostForm("payment_method_id"))
+	if pmStr == "" {
+		pmStr = "1"
+	}
+	req.PaymentMethod = pmStr
+
+	pmID, err := strconv.Atoi(pmStr)
+	if err != nil || pmID <= 0 {
+		pmID = 1
 	}
 
 	if req.Email == "" || req.FullName == "" || req.Address == "" {
@@ -173,7 +180,7 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 	var orderID int
 	err = tx.QueryRow(ctx,
 		"INSERT INTO orders (order_number, user_id, status_id, delivery_address, delivery_method_id, subtotal, delivery_fee, tax_amount, total, payment_method_id, order_date, created_at, updated_at) VALUES ($1,$2,$3,$4,1,$5,$6,0,$7,$8,$9,$10,$11) RETURNING id",
-		orderNum, userID, statusID, req.Address, subtotal, deliveryFee, total, req.PaymentMethod, now, now, now).Scan(&orderID)
+		orderNum, userID, statusID, req.Address, subtotal, deliveryFee, total, pmID, now, now, now).Scan(&orderID)
 
 	if err != nil {
 		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Failed to create order: %v", err)})
@@ -229,6 +236,7 @@ func (ctrl *TransactionController) Checkout(c *gin.Context) {
 			"fullName":       req.FullName,
 			"address":        req.Address,
 			"deliveryMethod": req.DeliveryMethod,
+			"paymentMethod":  req.PaymentMethod,
 		},
 	})
 }
