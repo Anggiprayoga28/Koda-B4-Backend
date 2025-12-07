@@ -15,7 +15,7 @@ import (
 type HistoryController struct{}
 
 // @Summary Get order history
-// @Description Get paginated order history
+// @Description Get paginated order history with aggregated product images
 // @Tags History
 // @Security BearerAuth
 // @Produce json
@@ -45,37 +45,24 @@ func (ctrl *HistoryController) GetHistory(c *gin.Context) {
 	endDate := strings.TrimSpace(c.Query("end_date"))
 	monthFilter := strings.TrimSpace(c.Query("month"))
 
-	query := `
-		SELECT 
-			o.id,
-			o.order_number,
-			o.order_date,
-			o.total,
-			os.name as status,
-			os.display_name as status_display,
-			COALESCE(p.image_url, '') as product_image
-		FROM orders o
-		JOIN order_status os ON o.status_id = os.id
-		LEFT JOIN order_items oi ON o.id = oi.order_id
-		LEFT JOIN products p ON oi.product_id = p.id
-		WHERE o.user_id = $1
-	`
+	whereConditions := []string{"o.user_id = $1"}
 	args := []interface{}{userID}
 	paramIndex := 2
 
 	if statusFilter != "" {
-		query += fmt.Sprintf(" AND os.name = $%d", paramIndex)
+		whereConditions = append(whereConditions, fmt.Sprintf("os.name = $%d", paramIndex))
 		args = append(args, statusFilter)
 		paramIndex++
 	}
 
 	if startDate != "" {
-		query += fmt.Sprintf(" AND DATE(o.order_date) >= $%d", paramIndex)
+		whereConditions = append(whereConditions, fmt.Sprintf("DATE(o.order_date) >= $%d", paramIndex))
 		args = append(args, startDate)
 		paramIndex++
 	}
+
 	if endDate != "" {
-		query += fmt.Sprintf(" AND DATE(o.order_date) <= $%d", paramIndex)
+		whereConditions = append(whereConditions, fmt.Sprintf("DATE(o.order_date) <= $%d", paramIndex))
 		args = append(args, endDate)
 		paramIndex++
 	}
@@ -87,74 +74,109 @@ func (ctrl *HistoryController) GetHistory(c *gin.Context) {
 			firstDay := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
 			lastDay := firstDay.AddDate(0, 1, -1)
 
-			query += fmt.Sprintf(" AND DATE(o.order_date) >= $%d AND DATE(o.order_date) <= $%d", paramIndex, paramIndex+1)
+			whereConditions = append(whereConditions,
+				fmt.Sprintf("DATE(o.order_date) >= $%d AND DATE(o.order_date) <= $%d", paramIndex, paramIndex+1))
 			args = append(args, firstDay.Format("2006-01-02"), lastDay.Format("2006-01-02"))
 			paramIndex += 2
 		}
 	}
 
-	query += " GROUP BY o.id, o.order_number, o.order_date, o.total, os.name, os.display_name, p.image_url"
-	query += " ORDER BY o.order_date DESC"
+	whereClause := strings.Join(whereConditions, " AND ")
 
-	countQuery := `
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(DISTINCT o.id)
 		FROM orders o
 		JOIN order_status os ON o.status_id = os.id
-		WHERE o.user_id = $1
-	`
-	countArgs := []interface{}{userID}
-	countParamIndex := 2
-
-	if statusFilter != "" {
-		countQuery += fmt.Sprintf(" AND os.name = $%d", countParamIndex)
-		countArgs = append(countArgs, statusFilter)
-		countParamIndex++
-	}
-	if startDate != "" {
-		countQuery += fmt.Sprintf(" AND DATE(o.order_date) >= $%d", countParamIndex)
-		countArgs = append(countArgs, startDate)
-		countParamIndex++
-	}
-	if endDate != "" {
-		countQuery += fmt.Sprintf(" AND DATE(o.order_date) <= $%d", countParamIndex)
-		countArgs = append(countArgs, endDate)
-		countParamIndex++
-	}
-	if monthFilter != "" {
-		t, err := time.Parse("January 2006", monthFilter)
-		if err == nil {
-			year, month, _ := t.Date()
-			firstDay := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
-			lastDay := firstDay.AddDate(0, 1, -1)
-
-			countQuery += fmt.Sprintf(" AND DATE(o.order_date) >= $%d AND DATE(o.order_date) <= $%d", countParamIndex, countParamIndex+1)
-			countArgs = append(countArgs, firstDay.Format("2006-01-02"), lastDay.Format("2006-01-02"))
-		}
-	}
+		WHERE %s
+	`, whereClause)
 
 	var total int
-	models.DB.QueryRow(context.Background(), countQuery, countArgs...).Scan(&total)
+	err := models.DB.QueryRow(context.Background(), countQuery, args...).Scan(&total)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": fmt.Sprintf("Count error: %v", err),
+		})
+		return
+	}
 
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", paramIndex, paramIndex+1)
+	query := fmt.Sprintf(`
+		SELECT 
+			o.id,
+			o.order_number,
+			o.order_date,
+			o.total,
+			os.name as status,
+			os.display_name as status_display,
+			COALESCE(
+				(
+					SELECT json_agg(p.image_url ORDER BY oi.id)
+					FROM order_items oi
+					JOIN products p ON oi.product_id = p.id
+					WHERE oi.order_id = o.id
+					LIMIT 4
+				),
+				'[]'::json
+			) as product_images,
+			(
+				SELECT COUNT(*)
+				FROM order_items oi
+				WHERE oi.order_id = o.id
+			) as total_items
+		FROM orders o
+		JOIN order_status os ON o.status_id = os.id
+		WHERE %s
+		ORDER BY o.order_date DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, paramIndex, paramIndex+1)
+
 	args = append(args, limit, offset)
 
 	rows, err := models.DB.Query(context.Background(), query, args...)
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": fmt.Sprintf("Query error: %v", err)})
+		c.JSON(500, gin.H{
+			"success": false,
+			"message": fmt.Sprintf("Query error: %v", err),
+		})
 		return
 	}
 	defer rows.Close()
 
 	orders := []gin.H{}
 	for rows.Next() {
-		var id int
-		var orderNumber, status, statusDisplay, productImage string
-		var orderDate time.Time
-		var totalAmount int
+		var (
+			id            int
+			orderNumber   string
+			status        string
+			statusDisplay string
+			orderDate     time.Time
+			totalAmount   int
+			productImages []byte
+			totalItems    int
+		)
 
-		err = rows.Scan(&id, &orderNumber, &orderDate, &totalAmount, &status, &statusDisplay, &productImage)
+		err = rows.Scan(&id, &orderNumber, &orderDate, &totalAmount, &status, &statusDisplay, &productImages, &totalItems)
 		if err != nil {
 			continue
+		}
+
+		var images []string
+		if len(productImages) > 0 {
+			imagesStr := string(productImages)
+			imagesStr = strings.Trim(imagesStr, "[]")
+			if imagesStr != "" {
+				parts := strings.Split(imagesStr, ",")
+				for _, part := range parts {
+					img := strings.Trim(strings.Trim(part, " "), "\"")
+					if img != "null" && img != "" {
+						images = append(images, img)
+					}
+				}
+			}
+		}
+
+		if len(images) == 0 {
+			images = []string{"https://via.placeholder.com/150"}
 		}
 
 		orders = append(orders, gin.H{
@@ -164,8 +186,13 @@ func (ctrl *HistoryController) GetHistory(c *gin.Context) {
 			"status":        status,
 			"statusDisplay": statusDisplay,
 			"total":         totalAmount,
-			"imageProduct":  productImage,
+			"productImages": images,
+			"totalItems":    totalItems,
 		})
+	}
+
+	if orders == nil {
+		orders = []gin.H{}
 	}
 
 	c.JSON(200, gin.H{
