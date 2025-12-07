@@ -12,7 +12,7 @@ import (
 
 func SetupRoutes(router *gin.Engine) {
 	authCtrl := &controllers.AuthController{}
-	profileCtrl := &controllers.ProfileController{}
+	profileCtrl := controllers.NewProfileController()
 	userCtrl := &controllers.UserController{}
 	productCtrl := &controllers.ProductController{}
 	orderCtrl := &controllers.OrderController{}
